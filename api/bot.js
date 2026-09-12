@@ -25,13 +25,18 @@ const adminState = {};
 
 // Helper to interact with Telegram API
 async function sendTelegramRequest(method, payload) {
-  const url = `https://api.telegram.org/bot${BOT_TOKEN}/${method}`;
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  return await response.json();
+  try {
+    const url = `https://api.telegram.org/bot${BOT_TOKEN}/${method}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    return await response.json();
+  } catch (err) {
+    console.error(`Telegram API Error (${method}):`, err);
+    return { ok: false, error: err.message };
+  }
 }
 
 // Send formatted message or OTP Card to Group
