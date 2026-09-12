@@ -1153,8 +1153,12 @@ module.exports = async function handler(req, res) {
           return res.status(200).json({ ok: true });
         }
 
-        if (text === '/admin' || text === '⚙️ Admin Panel') {
-          if (isUserAdmin) await sendAdminPanel(chatId);
+        if (text === '/admin' || text.includes('Admin') || text === 'Admin Panel') {
+          if (isUserAdmin) {
+            await sendAdminPanel(chatId);
+          } else {
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "⚠️ **Access Denied!**\n\nYou are not authorized to access the Admin Panel." });
+          }
           return res.status(200).json({ ok: true });
         }
 
