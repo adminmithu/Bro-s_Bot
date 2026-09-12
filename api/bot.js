@@ -373,7 +373,8 @@ module.exports = async function handler(req, res) {
         if (!message.chat) return res.status(200).json({ ok: true });
         const chatId = message.chat.id;
         const isGroup = message.chat.type === 'group' || message.chat.type === 'supergroup' || chatId < 0;
-        const cleanText = text.trim();
+        const text = (message.text || '').trim();
+        const cleanText = text;
         const isUserAdmin = !ADMIN_ID || String(chatId).trim() === String(ADMIN_ID).trim() || String(chatId) === '8929349073';
 
         if (isGroup) return res.status(200).json({ ok: true });
