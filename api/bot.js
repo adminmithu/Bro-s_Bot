@@ -183,6 +183,46 @@ async function sendCountrySelection(chatId, serviceId) {
   });
 }
 
+// Dispense 4 Numbers for a selected service & country
+async function sendDispensed4Numbers(chatId, serviceId, countryCode) {
+  const result = get4Numbers(serviceId, countryCode);
+  const country = getCountries().find(c => c.code === countryCode) || { flag: '🌐', name: countryCode };
+  const service = getServices(true).find(s => s.id === serviceId) || { icon: '📱', name: serviceId };
+
+  if (!result.success || result.numbers.length === 0) {
+    const text = `⚠️ **Out of Stock!**\n\nNo virtual numbers currently available for ${service.icon} **${service.name}** in ${country.flag} **${country.name}**.\n\nPlease check back later or select another country.`;
+    return await sendCountrySelection(chatId, serviceId);
+  }
+
+  let text = `==============================\n`;
+  text += `✨ **4 NUMBERS DISPENSED** ✨\n`;
+  text += `==============================\n\n`;
+  text += `📌 **Service:** ${service.icon} ${service.name}\n`;
+  text += `🌐 **Country:** ${country.flag} ${country.name}\n\n`;
+  text += `📱 **Assigned Phone Numbers:**\n`;
+  result.numbers.forEach((num, index) => {
+    text += `${index + 1}️⃣ \`${num}\`\n`;
+  });
+  text += `\n💡 **Tip:** Tap any number to copy instantly. Search OTP after sending SMS!`;
+
+  const inlineKeyboard = [
+    ...result.numbers.map(num => [
+      { text: `📋 Copy ${num}`, callback_data: `copy_${num}`, copy_text: { text: num } }
+    ]),
+    [
+      { text: "🔎 Search OTP", callback_data: "cmd_search_otp" },
+      { text: "🏠 Main Menu", callback_data: "back_to_main_menu" }
+    ]
+  ];
+
+  return await sendTelegramRequest('sendMessage', {
+    chat_id: chatId,
+    text: text,
+    parse_mode: 'Markdown',
+    reply_markup: { inline_keyboard: inlineKeyboard }
+  });
+}
+
 // Render Live Range Detector with 100% Reply Keyboard buttons
 async function sendLiveTrafficWithRangeKeyboard(chatId) {
   const liveRanges = getLiveRanges();
@@ -1451,17 +1491,54 @@ module.exports = async function handler(req, res) {
           return res.status(200).json({ ok: true });
         }
 
-        // User Navigation
-        if (text.startsWith('/start') || text.includes('Start')) {
-          if (text.includes('getnum')) {
-            await sendServiceSelection(chatId);
-          } else {
-            await sendMainMenu(chatId, "👋 **Welcome to Bro's Number Bot!**\n\nChoose an option from the menu below:");
-          }
-        } else if (text === '📲 Get Number' || text.includes('Get Number')) {
+        // User Navigation & Service / Country Selection Router
+        const cleanText = text.trim();
+        const allServices = getServices(true);
+        const allCountries = getCountries();
+
+        // 1. Service Selected from Reply Keyboard
+        const matchedService = allServices.find(s => 
+          cleanText.toLowerCase().includes(s.name.toLowerCase()) || 
+          s.name.toLowerCase().includes(cleanText.toLowerCase().replace(/^[^\w\s]/g, '').trim())
+        );
+
+        // 2. Country Selected from Reply Keyboard (e.g. "🇺🇸 UNITED STATES (150)")
+        const matchedCountry = allCountries.find(c => 
+          cleanText.toUpperCase().includes(c.code) || 
+          cleanText.toUpperCase().includes(c.name)
+        );
+
+        if (cleanText.startsWith('/start') || cleanText === '🏠 Main Menu' || cleanText === 'Main Menu') {
+          await sendMainMenu(chatId, "👋 **Welcome to Bro's Number Bot!**\n\nChoose an option from the menu below:");
+        } 
+        else if (cleanText === '📲 Get Number' || cleanText.includes('Get Number') || cleanText === '⬅️ Back to Services') {
           await sendServiceSelection(chatId);
-        } else {
-          await sendMainMenu(chatId, `You typed: *${text}*\n\nPlease select an option from the reply buttons below.`);
+        }
+        else if (matchedCountry) {
+          const svcId = adminState[chatId]?.lastServiceId || 'whatsapp';
+          await sendDispensed4Numbers(chatId, svcId, matchedCountry.code);
+        }
+        else if (matchedService) {
+          adminState[chatId] = { ...(adminState[chatId] || {}), lastServiceId: matchedService.id };
+          await sendCountrySelection(chatId, matchedService.id);
+        }
+        else if (cleanText === '📥 Add Stock (.txt)' || cleanText.includes('Add Stock')) {
+          const guideText = `📥 **HOW TO UPLOAD / ADD NUMBER STOCK**\n\n` +
+            `1️⃣ Create a \`.txt\` file with phone numbers (1 number per line).\n` +
+            `2️⃣ Send / Upload the \`.txt\` file in this chat.\n` +
+            `3️⃣ In the **File Caption**, write: \`<service> <country_code>\`\n\n` +
+            `*Examples:*\n` +
+            `• \`facebook US\` (Adds stock for Facebook USA 🇺🇸)\n` +
+            `• \`telegram BD\` (Adds stock for Telegram Bangladesh 🇧🇩)\n` +
+            `• \`whatsapp UK\` (Adds stock for WhatsApp UK 🇬🇧)`;
+          await sendTelegramRequest('sendMessage', {
+            chat_id: chatId,
+            text: guideText,
+            parse_mode: 'Markdown'
+          });
+        }
+        else {
+          await sendMainMenu(chatId, `👋 **Bro's Number Bot**\n\nPlease select an option from the reply buttons below:`);
         }
 
         return res.status(200).json({ ok: true });
