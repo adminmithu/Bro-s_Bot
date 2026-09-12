@@ -1458,16 +1458,15 @@ module.exports = async function handler(req, res) {
           await sendMainMenu(chatId, `You typed: *${text}*\n\nPlease select an option from the reply buttons below.`);
         }
 
-        return res.status(200).json({ ok: true });
+                return res.status(200).json({ ok: true });
       }
 
       return res.status(200).json({ ok: true });
-    } catch (err) {
-      console.error("Bot Handler Error:", err);
-      return res.status(500).json({ error: err.message });
     }
+
+    return res.status(405).json({ error: "Method not allowed" });
+  } catch (globalErr) {
+    console.error("Global Handler Error:", globalErr);
+    return res.status(200).json({ ok: false, error: globalErr.message });
   }
-
-  return res.status(405).json({ error: "Method not allowed" });
-}
-
+};
