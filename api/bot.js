@@ -1428,7 +1428,7 @@ module.exports = async function handler(req, res) {
         }
 
         // Support Handler
-        if (text === '📞 Support') {
+        if (text === 'Support' || text === '📞 Support' || text.includes('Support')) {
           const supportMsg = "💎 **Bro's Number Bot — Support Center** 💎\n\nNeed assistance with virtual numbers or OTP verification? Contact our admin team below:";
           await sendTelegramRequest('sendMessage', {
             chat_id: chatId,
@@ -1449,7 +1449,7 @@ module.exports = async function handler(req, res) {
         }
 
         // User Profile Handler
-        if (text === '👤 My Profile' || text.includes('Profile')) {
+        if (text === 'My Profile' || text === '👤 My Profile' || text.includes('Profile')) {
           const todayOtp = getUserOtpCount(chatId);
           let profileMsg = `╔═══════════════════╗\n`;
           profileMsg += `   👤 **USER ACCOUNT PROFILE**\n`;
@@ -1464,9 +1464,9 @@ module.exports = async function handler(req, res) {
         }
 
         // Search OTP Handler - Generates Image 2 formatted Card
-        if (text.startsWith('/otp') || text === '🔎 Search OTP' || (!text.startsWith('/') && text.replace(/\D/g, '').length >= 6)) {
+        if (text.startsWith('/otp') || text === 'Search OTP' || text === '🔎 Search OTP' || text.includes('Search OTP') || (!text.startsWith('/') && text.replace(/\D/g, '').length >= 6)) {
           const query = text.replace('/otp', '').trim();
-          if (!query || query === '🔎 Search OTP') {
+          if (!query || query === 'Search OTP' || query === '🔎 Search OTP') {
             await sendMainMenu(chatId, "🔎 **Search OTP**\n\nPlease reply with your **Phone Number**:\n\nExample: `+255710962660`");
             return res.status(200).json({ ok: true });
           }
