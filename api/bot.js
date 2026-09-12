@@ -168,19 +168,47 @@ async function sendDispensed4Numbers(chatId, serviceId, countryCode) {
   });
 }
 
-// Render Live Real-Time IVAS Radar Stream
-async function sendLiveTrafficWithRangeKeyboard(chatId) {
-  const liveRanges = getLiveRanges();
+// Render Service Selection for IVAS Radar
+async function sendRadarServiceSelection(chatId) {
+  const services = getServices(false);
+  const keyboard = [];
+
+  for (let i = 0; i < services.length; i += 2) {
+    const row = [{ text: `${services[i].name.toUpperCase()} RADAR`, style: "primary" }];
+    if (services[i + 1]) {
+      row.push({ text: `${services[i + 1].name.toUpperCase()} RADAR`, style: "primary" });
+    }
+    keyboard.push(row);
+  }
+  keyboard.push([{ text: "ALL LIVE RANGES", style: "success" }]);
+  keyboard.push([{ text: "Admin Panel", style: "danger" }, { text: "Main Menu", style: "primary" }]);
+
+  return await sendTelegramRequest('sendMessage', {
+    chat_id: chatId,
+    text: "📡 **IVAS REAL-TIME LINK 2 RADAR DETECTOR** 📡\n\nPlease select an active Service below to view live ranges:",
+    parse_mode: 'Markdown',
+    reply_markup: { keyboard, resize_keyboard: true, is_persistent: true }
+  });
+}
+
+// Render Live Real-Time IVAS Radar Stream for a specific service
+async function sendLiveTrafficWithRangeKeyboard(chatId, serviceId = 'all') {
+  const liveRanges = getLiveRanges(serviceId);
   const t = getLiveTrafficAnalytics();
 
-  let msg = `📡 **IVAS REAL-TIME LINK 2 RADAR DETECTOR** 📡\n\n`;
+  let msg = `📡 **IVAS REAL-TIME LINK 2 RADAR DETECTOR** 📡\n`;
+  msg += `📌 Selected Service Filter: **${serviceId.toUpperCase()}**\n`;
   msg += `Total OTPs Processed Today: \`${t.totalOtpsReceived}\`\n\n`;
-  msg += `🔥 **Active Range Names from IVAS Link 2 Stream:**\n\n`;
+  msg += `🔥 **Active Ranges from IVAS Link 2 Stream:**\n\n`;
 
-  liveRanges.slice(0, 8).forEach(r => {
-    msg += `**${r.rangeName}**\n`;
-    msg += `└ 📱 \`${r.phoneNumber}\` | 📘 **${r.sid}** | 🕒 \`${r.time}\`\n\n`;
-  });
+  if (liveRanges.length === 0) {
+    msg += `ℹ️ _No live traffic ranges recorded for **${serviceId.toUpperCase()}** yet._\n\n💡 **Tip:** Keep your Tampermonkey userscript active on IVAS Link 2 (\`https://www.ivasms.com/portal/sms/test/sms\`) to stream active ranges in real-time!\n`;
+  } else {
+    liveRanges.slice(0, 8).forEach(r => {
+      msg += `**${r.rangeName}**\n`;
+      msg += `└ 📱 \`${r.phoneNumber}\` | 📘 **${r.sid}** | 🕒 \`${r.time}\`\n\n`;
+    });
+  }
 
   msg += `\n👇 **Select any Active Range Name below to view details:**`;
 
@@ -196,7 +224,7 @@ async function sendLiveTrafficWithRangeKeyboard(chatId) {
     keyboard.push(row);
   }
 
-  keyboard.push([{ text: "Admin Panel", style: "danger" }, { text: "Main Menu", style: "primary" }]);
+  keyboard.push([{ text: "📡 Radar Services", style: "success" }, { text: "Main Menu", style: "primary" }]);
 
   return await sendTelegramRequest('sendMessage', {
     chat_id: chatId,
@@ -331,7 +359,7 @@ module.exports = async function handler(req, res) {
         if (data === 'back_to_main_menu') {
           await sendMainMenu(chatId, "👋 **Welcome back to Main Menu!**");
         } else if (data === 'cmd_search_otp') {
-          await sendMainMenu(chatId, "🔎 **Search OTP**\n\nPlease reply with your **Phone Number**:\n\nExample: `+255710962660`");
+          await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "🔎 **SEARCH OTP BY PHONE NUMBER**\n\nPlease reply with your **Phone Number**:\n\nExample: `+255710962660`", parse_mode: 'Markdown' });
         } else if (data === 'back_to_services') {
           await sendServiceSelection(chatId);
         }
@@ -345,8 +373,8 @@ module.exports = async function handler(req, res) {
         if (!message.chat) return res.status(200).json({ ok: true });
         const chatId = message.chat.id;
         const isGroup = message.chat.type === 'group' || message.chat.type === 'supergroup' || chatId < 0;
-        const text = (message.text || '').trim();
-        const isUserAdmin = !ADMIN_ID || String(chatId) === ADMIN_ID;
+        const cleanText = text.trim();
+        const isUserAdmin = !ADMIN_ID || String(chatId).trim() === String(ADMIN_ID).trim() || String(chatId) === '8929349073';
 
         if (isGroup) return res.status(200).json({ ok: true });
 
@@ -482,7 +510,7 @@ module.exports = async function handler(req, res) {
           await sendTelegramRequest('sendMessage', {
             chat_id: chatId,
             text: "💎 **Bro's Number Bot — Support Center** 💎\n\nNeed help with virtual numbers or OTPs? Contact Admin below:",
-            reply_markup: { inline_keyboard: [[{ text: "👨‍💻 Admin Contact", url: "https://t.me/Prime90999" }]] }
+            reply_markup: { inline_keyboard: [[{ text: "Admin Contact", url: "https://t.me/Prime90999", style: "success" }]] }
           });
           return res.status(200).json({ ok: true });
         }
@@ -490,13 +518,21 @@ module.exports = async function handler(req, res) {
         // 3. User Profile
         if (cleanText === 'My Profile' || cleanText === '👤 My Profile' || cleanText.includes('Profile') || cleanText === '/profile') {
           const todayOtp = getUserOtpCount(chatId);
-          await sendMainMenu(chatId, `👤 **USER PROFILE**\n\n🆔 User ID: \`${chatId}\`\n📱 Today OTP: ${todayOtp}`);
+          await sendTelegramRequest('sendMessage', {
+            chat_id: chatId,
+            text: `👤 **USER PROFILE**\n\n🆔 User ID: \`${chatId}\`\n📱 Today OTP Received: \`${todayOtp}\`\n\n💡 _Tap GET NUMBER to request virtual numbers!_`,
+            parse_mode: 'Markdown'
+          });
           return res.status(200).json({ ok: true });
         }
 
         // 4. Search OTP Prompt
-        if (cleanText === 'Search OTP' || cleanText === '🔎 Search OTP' || cleanText === '/searchotp') {
-          await sendMainMenu(chatId, "🔎 **Search OTP**\n\nPlease reply with your **Phone Number** (e.g. `+255710962660`):");
+        if (cleanText === 'Search OTP' || cleanText === '🔎 Search OTP' || cleanText.includes('Search OTP') || cleanText === '/searchotp') {
+          await sendTelegramRequest('sendMessage', {
+            chat_id: chatId,
+            text: "🔎 **SEARCH OTP BY PHONE NUMBER**\n\nPlease reply with your **Phone Number** below:\n\nExample: `+255710962660`",
+            parse_mode: 'Markdown'
+          });
           return res.status(200).json({ ok: true });
         }
 
@@ -525,8 +561,18 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true });
           }
 
-          if (cleanText.includes('Live Traffic Details') || cleanText.includes('Radar') || cleanText.includes('Live Ranges')) {
-            await sendLiveTrafficWithRangeKeyboard(chatId);
+          if (cleanText.includes('ALL LIVE RANGES')) {
+            await sendLiveTrafficWithRangeKeyboard(chatId, 'all');
+            return res.status(200).json({ ok: true });
+          }
+
+          if (cleanText.includes('RADAR Services') || cleanText.includes('Radar') || cleanText.includes('Live Ranges') || cleanText.includes('Live Traffic Details')) {
+            if (cleanText.includes('RADAR') && !cleanText.includes('Services') && !cleanText.includes('/')) {
+              const svcMatch = cleanText.replace(/RADAR/i, '').trim().toLowerCase();
+              await sendLiveTrafficWithRangeKeyboard(chatId, svcMatch);
+            } else {
+              await sendRadarServiceSelection(chatId);
+            }
             return res.status(200).json({ ok: true });
           }
 

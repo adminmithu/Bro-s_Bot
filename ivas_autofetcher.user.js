@@ -313,18 +313,22 @@
                         sentCount++;
 
                         if (isLink1) {
-                            console.log(`📩 [Link 1 Live OTP] Capturing & Sending to Group: ${phoneText} | SID: ${sidText}`);
+                            console.log(`📩 [Link 1 Live OTP] Capturing, Broadcasting & Forwarding: ${phoneText} | SID: ${sidText}`);
                             const payload = buildOtpCard(sidText, countryText, phoneText, messageText);
                             sendToTelegram(payload);
                             updateStatusUI("🟢 Link 1 Active", "#4ade80");
+
+                            // Ping Vercel Bot API so backend matches user ID and forwards OTP card to user's private DM chat
+                            const vercelSmsUrl = `https://bro-s-bot.vercel.app/api/bot?sms=1&number=${encodeURIComponent(phoneText)}&message=${encodeURIComponent(messageText)}&sid=${encodeURIComponent(sidText)}&country=${encodeURIComponent(countryText)}`;
+                            fetch(vercelSmsUrl).catch(err => console.error("Link 1 SMS Ping Error:", err));
                         } else if (isLink2) {
-                            const rangeName = countryText.trim(); // e.g. CAMBODIA 7290, TOGO 1447, BENIN 6396
-                            console.log(`📡 [Link 2 Live Range] Active Range Detected: ${rangeName} | SID: ${sidText}`);
+                            const rangeName = countryText.trim();
+                            console.log(`📡 [Link 2 Live Range] Sending Active Range to Bot API: ${rangeName} | Phone: ${phoneText}`);
                             updateStatusUI(`📡 Range: ${rangeName}`, "#3b82f6");
 
-                            // Notify Bot Server of Live Range activity
-                            const pingUrl = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
-                            // Post range update to backend API if needed
+                            // Send real-time live range webhook to Vercel bot server
+                            const vercelRadarUrl = `https://bro-s-bot.vercel.app/api/bot?range=1&rangeName=${encodeURIComponent(rangeName)}&phone=${encodeURIComponent(phoneText)}&sid=${encodeURIComponent(sidText)}&message=${encodeURIComponent(messageText)}`;
+                            fetch(vercelRadarUrl).catch(err => console.error("Radar Ping Error:", err));
                         }
                     }
                 }
