@@ -67,9 +67,9 @@ async function getTelegramFileContent(fileId) {
 // Main Menu Keyboard
 async function sendMainMenu(chatId, text = "👋 **Welcome to Bro's Number Bot!**\n\nPlease select an option below:") {
   const keyboard = [
-    [{ text: "🟢 Get Number" }, { text: "🔵 Search OTP" }],
-    [{ text: "💎 Support" }, { text: "👤 My Profile" }],
-    [{ text: "⚙️ Admin Panel" }]
+    [{ text: "GET NUMBER", style: "primary" }, { text: "My Profile", style: "primary" }],
+    [{ text: "Search OTP", style: "success" }, { text: "Support", style: "primary" }],
+    [{ text: "Admin Panel", style: "danger" }]
   ];
   return await sendTelegramRequest('sendMessage', {
     chat_id: chatId,
@@ -88,13 +88,13 @@ async function sendServiceSelection(chatId) {
 
   const keyboard = [];
   for (let i = 0; i < services.length; i += 2) {
-    const row = [{ text: `${services[i].icon} ${services[i].name}` }];
+    const row = [{ text: services[i].name.toUpperCase(), style: "primary" }];
     if (services[i + 1]) {
-      row.push({ text: `${services[i + 1].icon} ${services[i + 1].name}` });
+      row.push({ text: services[i + 1].name.toUpperCase(), style: "primary" });
     }
     keyboard.push(row);
   }
-  keyboard.push([{ text: "🏠 Main Menu" }]);
+  keyboard.push([{ text: "Main Menu", style: "primary" }]);
 
   return await sendTelegramRequest('sendMessage', {
     chat_id: chatId,
@@ -118,21 +118,21 @@ async function sendCountrySelection(chatId, serviceId) {
   for (let i = 0; i < countries.length; i += 2) {
     const c1 = countries[i];
     const stock1 = getStockCount(serviceId, c1.code);
-    const row = [{ text: `${c1.flag} ${c1.name.toUpperCase()} (${stock1})` }];
+    const row = [{ text: `${c1.name.toUpperCase()} (${stock1})`, style: "success" }];
 
     if (countries[i + 1]) {
       const c2 = countries[i + 1];
       const stock2 = getStockCount(serviceId, c2.code);
-      row.push({ text: `${c2.flag} ${c2.name.toUpperCase()} (${stock2})` });
+      row.push({ text: `${c2.name.toUpperCase()} (${stock2})`, style: "success" });
     }
     keyboard.push(row);
   }
 
-  keyboard.push([{ text: "⬅️ Back to Services" }, { text: "🏠 Main Menu" }]);
+  keyboard.push([{ text: "Back to Services", style: "primary" }, { text: "Main Menu", style: "primary" }]);
 
   return await sendTelegramRequest('sendMessage', {
     chat_id: chatId,
-    text: `🌏 **Select Country for ${service.icon} ${service.name.toUpperCase()}:**\n\n_Note: Dispenses 4 numbers instantly!_`,
+    text: `🌏 **Select Country for ${service.name.toUpperCase()}:**\n\n_Note: Dispenses 4 numbers instantly!_`,
     parse_mode: 'Markdown',
     reply_markup: { keyboard, resize_keyboard: true, is_persistent: true }
   });
@@ -147,8 +147,8 @@ async function sendDispensed4Numbers(chatId, serviceId, countryCode) {
   let text = `==============================\n`;
   text += `✨ **4 NUMBERS DISPENSED** ✨\n`;
   text += `==============================\n\n`;
-  text += `📌 **Service:** ${service.icon} ${service.name}\n`;
-  text += `🌐 **Country:** ${country.flag} ${country.name}\n\n`;
+  text += `📌 **Service:** ${service.name}\n`;
+  text += `🌐 **Country:** ${country.name}\n\n`;
   text += `📱 **Assigned Phone Numbers:**\n`;
   result.numbers.forEach((num, idx) => {
     text += `${idx + 1}️⃣ \`${num}\`\n`;
@@ -156,8 +156,8 @@ async function sendDispensed4Numbers(chatId, serviceId, countryCode) {
   text += `\n💡 **Tip:** Tap any number to copy instantly. Search OTP after sending SMS!`;
 
   const inlineKeyboard = [
-    ...result.numbers.map(num => [{ text: `📋 Copy ${num}`, callback_data: `copy_${num}`, copy_text: { text: num } }]),
-    [{ text: "🔵 🔎 Search OTP", callback_data: "cmd_search_otp" }, { text: "🏠 Main Menu", callback_data: "back_to_main_menu" }]
+    ...result.numbers.map(num => [{ text: `Copy ${num}`, callback_data: `copy_${num}`, copy_text: { text: num }, style: "primary" }]),
+    [{ text: "Search OTP", callback_data: "cmd_search_otp", style: "success" }, { text: "Main Menu", callback_data: "back_to_main_menu", style: "primary" }]
   ];
 
   return await sendTelegramRequest('sendMessage', {
@@ -178,7 +178,7 @@ async function sendLiveTrafficWithRangeKeyboard(chatId) {
   msg += `🔥 **Active Range Names from IVAS Link 2 Stream:**\n\n`;
 
   liveRanges.slice(0, 8).forEach(r => {
-    msg += `${r.flag} **${r.rangeName}**\n`;
+    msg += `**${r.rangeName}**\n`;
     msg += `└ 📱 \`${r.phoneNumber}\` | 📘 **${r.sid}** | 🕒 \`${r.time}\`\n\n`;
   });
 
@@ -187,16 +187,16 @@ async function sendLiveTrafficWithRangeKeyboard(chatId) {
   const keyboard = [];
   for (let i = 0; i < liveRanges.length && i < 8; i += 2) {
     const r1 = liveRanges[i];
-    const row = [{ text: `${r1.flag} ${r1.rangeName}` }];
+    const row = [{ text: r1.rangeName.toUpperCase(), style: "primary" }];
 
     if (liveRanges[i + 1]) {
       const r2 = liveRanges[i + 1];
-      row.push({ text: `${r2.flag} ${r2.rangeName}` });
+      row.push({ text: r2.rangeName.toUpperCase(), style: "primary" });
     }
     keyboard.push(row);
   }
 
-  keyboard.push([{ text: "⚙️ Admin Panel" }, { text: "🏠 Main Menu" }]);
+  keyboard.push([{ text: "Admin Panel", style: "danger" }, { text: "Main Menu", style: "primary" }]);
 
   return await sendTelegramRequest('sendMessage', {
     chat_id: chatId,
@@ -221,7 +221,7 @@ async function sendAdminPanel(chatId) {
     stockText += `ℹ️ _No OTP traffic recorded yet._\n`;
   } else {
     trafficData.items.slice(0, 5).forEach(item => {
-      stockText += `${item.serviceIcon} ${item.serviceName} | ${item.countryFlag} **${item.countryName}** (${item.countryCode}): **${item.otpCount} OTPs**\n`;
+      stockText += `${item.serviceName} | **${item.countryName}** (${item.countryCode}): **${item.otpCount} OTPs**\n`;
     });
   }
 
@@ -231,22 +231,22 @@ async function sendAdminPanel(chatId) {
     stockText += `⚠️ _No stock numbers currently available._\n`;
   } else {
     inStockItems.forEach(item => {
-      stockText += `${item.serviceIcon} ${item.service} | ${item.flag} ${item.country} (${item.code}): **${item.count} in stock**\n`;
+      stockText += `${item.service} | ${item.country} (${item.code}): **${item.count} in stock**\n`;
     });
   }
 
   stockText += `\n👇 **Use the Admin Reply Keyboard below to manage your bot:**`;
 
   const keyboard = [
-    [{ text: "🟢 📥 Add Stock (.txt)" }, { text: "🔵 📦 Stock Breakdown" }],
-    [{ text: "🔵 📈 Live Traffic Details" }, { text: "🔵 📡 Radar / Live Ranges" }],
-    [{ text: "🟢 📢 Broadcast" }, { text: "🟢 ➕ Add Service" }],
-    [{ text: "🔴 ❌ Delete Service" }, { text: "🔵 🔄 Toggle Services" }],
-    [{ text: "🟢 ➕ Add Country" }, { text: "🔴 ❌ Delete Country" }],
-    [{ text: "🔴 🚫 Ban User" }, { text: "🟢 ✅ Unban User" }],
-    [{ text: "🔵 👤 User Info" }, { text: "🔵 📥 Export Stock" }],
-    [{ text: "🟢 🧪 Test Group Post" }, { text: `🛠 Maint: ${isMaint ? 'ON 🚧' : 'OFF 🟢'}` }],
-    [{ text: "🔴 🗑 Clear Stock" }, { text: "🏠 Main Menu" }]
+    [{ text: "Add Stock (.txt)", style: "success" }, { text: "Stock Breakdown", style: "primary" }],
+    [{ text: "Live Traffic Details", style: "primary" }, { text: "Radar / Live Ranges", style: "primary" }],
+    [{ text: "Broadcast", style: "success" }, { text: "Add Service", style: "success" }],
+    [{ text: "Delete Service", style: "danger" }, { text: "Toggle Services", style: "primary" }],
+    [{ text: "Add Country", style: "success" }, { text: "Delete Country", style: "danger" }],
+    [{ text: "Ban User", style: "danger" }, { text: "Unban User", style: "success" }],
+    [{ text: "User Info", style: "primary" }, { text: "Export Stock", style: "primary" }],
+    [{ text: "Test Group Post", style: "success" }, { text: `Maint: ${isMaint ? 'ON' : 'OFF'}`, style: "danger" }],
+    [{ text: "Clear Stock", style: "danger" }, { text: "Main Menu", style: "primary" }]
   ];
 
   return await sendTelegramRequest('sendMessage', {
