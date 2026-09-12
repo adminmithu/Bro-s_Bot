@@ -64,7 +64,7 @@ async function getTelegramFileContent(fileId) {
 // UI RENDERING HELPERS
 // -------------------------------------------------------------
 
-// Main Menu Keyboard
+// Main Menu Keyboard with Clean Text Labels
 async function sendMainMenu(chatId, text = "👋 **Welcome to Bro's Number Bot!**\n\nPlease select an option below:") {
   const keyboard = [
     [{ text: "Get Number" }, { text: "Search OTP" }],
