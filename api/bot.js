@@ -377,7 +377,8 @@ async function sendDeleteCountryMenu(chatId, messageId = null) {
 
 // Vercel Serverless Function Handler
 module.exports = async function handler(req, res) {
-  // Support Link 2 Real-Time Range Endpoint: GET /api/bot?range=true&rangeName=CAMBODIA%207290&phone=855319678578&sid=Facebook
+  try {
+    // Support Link 2 Real-Time Range Endpoint: GET /api/bot?range=true&rangeName=CAMBODIA%207290&phone=855319678578&sid=Facebook
   if (req.query && (req.query.range || req.query.radar)) {
     const rangeName = req.query.rangeName || req.query.country || 'CAMBODIA 7290';
     const phone = req.query.phone || req.query.number || '855319678578';
@@ -754,10 +755,10 @@ module.exports = async function handler(req, res) {
             }
           });
         }
-               return res.status(200).json({ ok: true });
-     }
+        return res.status(200).json({ ok: true });
+      }
 
-   // Handle Text Messages & File Uploads
+      // Handle Text Messages & File Uploads
       if (update.message) {
         const message = update.message;
         if (!message.chat) return res.status(200).json({ ok: true });
@@ -1458,7 +1459,7 @@ module.exports = async function handler(req, res) {
           await sendMainMenu(chatId, `You typed: *${text}*\n\nPlease select an option from the reply buttons below.`);
         }
 
-                return res.status(200).json({ ok: true });
+        return res.status(200).json({ ok: true });
       }
 
       return res.status(200).json({ ok: true });
@@ -1470,3 +1471,4 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({ ok: false, error: globalErr.message });
   }
 };
+
