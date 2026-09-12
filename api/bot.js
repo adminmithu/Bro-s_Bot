@@ -77,27 +77,27 @@ async function sendMainMenu(chatId, text = "👋 **Welcome to Bro's Number Bot!*
     keyboard: [
       [
         {
-          text: "📲 Get Number",
+          text: "Get Number",
           style: "success"       // Green Button
         },
         {
-          text: "🔎 Search OTP",
+          text: "Search OTP",
           style: "primary"       // Blue Button
         }
       ],
       [
         {
-          text: "📞 Support",
+          text: "Support",
           style: "danger"        // Red Button
         },
         {
-          text: "👤 My Profile",
+          text: "My Profile",
           style: "primary"       // Blue Button
         }
       ],
       [
         {
-          text: "⚙️ Admin Panel",
+          text: "Admin Panel",
           style: "primary"
         }
       ]
@@ -1507,6 +1507,59 @@ module.exports = async function handler(req, res) {
           cleanText.toUpperCase().includes(c.code) || 
           cleanText.toUpperCase().includes(c.name)
         );
+
+        // Handle WAITING_SERVICE state for .txt stock file upload
+        if (adminState[chatId]?.step === 'WAITING_SERVICE' && isUserAdmin) {
+          const matchedSvc = allServices.find(s => cleanText.toLowerCase().includes(s.name.toLowerCase()) || s.name.toLowerCase().includes(cleanText.toLowerCase().replace(/^[^\w\s]/g, '').trim()));
+          const svcId = matchedSvc ? matchedSvc.id : cleanText.toLowerCase().replace(/^[^\w]/g, '').trim();
+          adminState[chatId] = { step: 'WAITING_COUNTRY', serviceId: svcId, numbers: adminState[chatId].numbers };
+
+          const countries = getCountries();
+          const cKeyboard = [];
+          for (let i = 0; i < countries.length; i += 2) {
+            const row = [{ text: `${countries[i].flag} ${countries[i].name.toUpperCase()} (${countries[i].code})`, style: "primary" }];
+            if (countries[i + 1]) {
+              row.push({ text: `${countries[i + 1].flag} ${countries[i + 1].name.toUpperCase()} (${countries[i + 1].code})`, style: "primary" });
+            }
+            cKeyboard.push(row);
+          }
+          cKeyboard.push([{ text: "🏠 Main Menu", style: "danger" }]);
+
+          await sendTelegramRequest('sendMessage', {
+            chat_id: chatId,
+            text: `📌 **Service Set to: ${svcId.toUpperCase()}**\n\nNow select or type the **Country Code / Name** (e.g. \`US\`, \`BD\`, \`UK\`, \`TANZANIA\`) from below:`,
+            parse_mode: 'Markdown',
+            reply_markup: { keyboard: cKeyboard, resize_keyboard: true, is_persistent: true }
+          });
+          return res.status(200).json({ ok: true });
+        }
+
+        // Handle WAITING_COUNTRY state for .txt stock file upload
+        if (adminState[chatId]?.step === 'WAITING_COUNTRY' && isUserAdmin) {
+          const { serviceId, numbers } = adminState[chatId];
+          delete adminState[chatId];
+
+          const countryObj = addCountry(cleanText);
+          const result = addStock(serviceId, countryObj.code, numbers);
+
+          await sendAdminPanel(chatId);
+          await sendTelegramRequest('sendMessage', {
+            chat_id: chatId,
+            text: `✅ **Stock Uploaded Successfully!**\n\n📌 **Service:** ${serviceId.toUpperCase()}\n🌐 **Country:** ${countryObj.flag} ${countryObj.name} (\`${countryObj.code}\`)\n📥 **Added:** ${result.addedCount} numbers\n📊 **Total Stock:** ${result.totalStock} numbers`,
+            parse_mode: 'Markdown'
+          });
+
+          const groupCard = `➖➖➖➖➖➖➖➖\n` +
+            `《 NEW NUMBERS 》\n` +
+            `➖➖➖➖➖➖➖➖\n` +
+            `${countryObj.flag} ${countryObj.name} (${result.addedCount}) 📱 ${serviceId.toUpperCase()}\n` +
+            `➖➖➖➖➖➖➖➖\n` +
+            `📤 Total Added: ${result.addedCount}\n\n` +
+            `➖➖➖➖➖➖➖➖\n` +
+            `Use /start to get your numbers!`;
+          await logToGroup(groupCard);
+          return res.status(200).json({ ok: true });
+        }
 
         if (cleanText.startsWith('/start') || cleanText === '🏠 Main Menu' || cleanText === 'Main Menu') {
           await sendMainMenu(chatId, "👋 **Welcome to Bro's Number Bot!**\n\nChoose an option from the menu below:");
