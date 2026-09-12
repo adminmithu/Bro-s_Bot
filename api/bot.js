@@ -1,6 +1,6 @@
 /**
  * Bro's Number Bot - Telegram Serverless Bot for Vercel
- * Ultra-Clean, High Performance Architecture
+ * Ultra-Robust Architecture with Zero Fallback Kickouts & Live IVAS Radar
  */
 
 const {
@@ -16,8 +16,8 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "8848165401:AAFiUELKvW-apfBB
 const ADMIN_ID = process.env.ADMIN_ID ? String(process.env.ADMIN_ID).trim() : "8929349073";
 const GROUP_ID = process.env.GROUP_ID ? String(process.env.GROUP_ID).trim() : '-1004296466829';
 
-// Admin Interactive State Machine
-const adminState = {};
+// Session State Machine for Interactive Uploads & Navigation
+const sessionState = {};
 
 // Helper: Telegram API Request
 async function sendTelegramRequest(method, payload) {
@@ -64,12 +64,12 @@ async function getTelegramFileContent(fileId) {
 // UI RENDERING HELPERS
 // -------------------------------------------------------------
 
-// Main Menu Keyboard with Clean Text Labels
+// Main Menu Keyboard
 async function sendMainMenu(chatId, text = "👋 **Welcome to Bro's Number Bot!**\n\nPlease select an option below:") {
   const keyboard = [
-    [{ text: "Get Number" }, { text: "Search OTP" }],
-    [{ text: "Support" }, { text: "My Profile" }],
-    [{ text: "Admin Panel" }]
+    [{ text: "🟢 Get Number" }, { text: "🔵 Search OTP" }],
+    [{ text: "💎 Support" }, { text: "👤 My Profile" }],
+    [{ text: "⚙️ Admin Panel" }]
   ];
   return await sendTelegramRequest('sendMessage', {
     chat_id: chatId,
@@ -104,7 +104,7 @@ async function sendServiceSelection(chatId) {
   });
 }
 
-// Country Selection Keyboard
+// Country Selection Keyboard for a selected service
 async function sendCountrySelection(chatId, serviceId) {
   const services = getServices(true);
   const service = services.find(s => s.id === serviceId) || { name: serviceId, icon: '📱' };
@@ -138,7 +138,7 @@ async function sendCountrySelection(chatId, serviceId) {
   });
 }
 
-// Dispense 4 Numbers
+// Dispense 4 Numbers instantly
 async function sendDispensed4Numbers(chatId, serviceId, countryCode) {
   const result = get4Numbers(serviceId, countryCode, chatId);
   const country = getCountries().find(c => c.code === countryCode) || { flag: '🌐', name: countryCode };
@@ -153,11 +153,11 @@ async function sendDispensed4Numbers(chatId, serviceId, countryCode) {
   result.numbers.forEach((num, idx) => {
     text += `${idx + 1}️⃣ \`${num}\`\n`;
   });
-  text += `\n💡 **Tip:** Tap any number to copy. Search OTP after sending SMS!`;
+  text += `\n💡 **Tip:** Tap any number to copy instantly. Search OTP after sending SMS!`;
 
   const inlineKeyboard = [
     ...result.numbers.map(num => [{ text: `📋 Copy ${num}`, callback_data: `copy_${num}`, copy_text: { text: num } }]),
-    [{ text: "🔎 Search OTP", callback_data: "cmd_search_otp" }, { text: "🏠 Main Menu", callback_data: "back_to_main_menu" }]
+    [{ text: "🔵 🔎 Search OTP", callback_data: "cmd_search_otp" }, { text: "🏠 Main Menu", callback_data: "back_to_main_menu" }]
   ];
 
   return await sendTelegramRequest('sendMessage', {
@@ -168,7 +168,45 @@ async function sendDispensed4Numbers(chatId, serviceId, countryCode) {
   });
 }
 
-// Admin Panel Keyboard Dashboard
+// Render Live Real-Time IVAS Radar Stream
+async function sendLiveTrafficWithRangeKeyboard(chatId) {
+  const liveRanges = getLiveRanges();
+  const t = getLiveTrafficAnalytics();
+
+  let msg = `📡 **IVAS REAL-TIME LINK 2 RADAR DETECTOR** 📡\n\n`;
+  msg += `Total OTPs Processed Today: \`${t.totalOtpsReceived}\`\n\n`;
+  msg += `🔥 **Active Range Names from IVAS Link 2 Stream:**\n\n`;
+
+  liveRanges.slice(0, 8).forEach(r => {
+    msg += `${r.flag} **${r.rangeName}**\n`;
+    msg += `└ 📱 \`${r.phoneNumber}\` | 📘 **${r.sid}** | 🕒 \`${r.time}\`\n\n`;
+  });
+
+  msg += `\n👇 **Select any Active Range Name below to view details:**`;
+
+  const keyboard = [];
+  for (let i = 0; i < liveRanges.length && i < 8; i += 2) {
+    const r1 = liveRanges[i];
+    const row = [{ text: `${r1.flag} ${r1.rangeName}` }];
+
+    if (liveRanges[i + 1]) {
+      const r2 = liveRanges[i + 1];
+      row.push({ text: `${r2.flag} ${r2.rangeName}` });
+    }
+    keyboard.push(row);
+  }
+
+  keyboard.push([{ text: "⚙️ Admin Panel" }, { text: "🏠 Main Menu" }]);
+
+  return await sendTelegramRequest('sendMessage', {
+    chat_id: chatId,
+    text: msg,
+    parse_mode: 'Markdown',
+    reply_markup: { keyboard, resize_keyboard: true, is_persistent: true }
+  });
+}
+
+// Admin Panel Dashboard Keyboard
 async function sendAdminPanel(chatId) {
   const summary = getAllStockSummary();
   const isMaint = getMaintenance();
@@ -200,14 +238,15 @@ async function sendAdminPanel(chatId) {
   stockText += `\n👇 **Use the Admin Reply Keyboard below to manage your bot:**`;
 
   const keyboard = [
-    [{ text: "📥 Add Stock (.txt)" }, { text: "📦 Stock Breakdown" }],
-    [{ text: "📈 Live Traffic Details" }, { text: "📢 Broadcast" }],
-    [{ text: "➕ Add Service" }, { text: "❌ Delete Service" }],
-    [{ text: "🔄 Toggle Services" }, { text: "➕ Add Country" }],
-    [{ text: "🚫 Ban User" }, { text: "✅ Unban User" }],
-    [{ text: "👤 User Info" }, { text: "📥 Export Stock" }],
-    [{ text: "🧪 Test Group Post" }, { text: `🛠 Maint: ${isMaint ? 'ON 🚧' : 'OFF 🟢'}` }],
-    [{ text: "🗑 Clear Stock" }, { text: "🏠 Main Menu" }]
+    [{ text: "🟢 📥 Add Stock (.txt)" }, { text: "🔵 📦 Stock Breakdown" }],
+    [{ text: "🔵 📈 Live Traffic Details" }, { text: "🔵 📡 Radar / Live Ranges" }],
+    [{ text: "🟢 📢 Broadcast" }, { text: "🟢 ➕ Add Service" }],
+    [{ text: "🔴 ❌ Delete Service" }, { text: "🔵 🔄 Toggle Services" }],
+    [{ text: "🟢 ➕ Add Country" }, { text: "🔴 ❌ Delete Country" }],
+    [{ text: "🔴 🚫 Ban User" }, { text: "🟢 ✅ Unban User" }],
+    [{ text: "🔵 👤 User Info" }, { text: "🔵 📥 Export Stock" }],
+    [{ text: "🟢 🧪 Test Group Post" }, { text: `🛠 Maint: ${isMaint ? 'ON 🚧' : 'OFF 🟢'}` }],
+    [{ text: "🔴 🗑 Clear Stock" }, { text: "🏠 Main Menu" }]
   ];
 
   return await sendTelegramRequest('sendMessage', {
@@ -225,7 +264,7 @@ module.exports = async function handler(req, res) {
   try {
     const query = req.query || {};
 
-    // 1. IVAS Link 2 Live Range Endpoint
+    // 1. IVAS Link 2 Live Range Stream Webhook Endpoint
     if (query.range || query.radar) {
       const rangeName = query.rangeName || query.country || 'CAMBODIA 7290';
       const phone = query.phone || query.number || '855319678578';
@@ -315,14 +354,20 @@ module.exports = async function handler(req, res) {
 
         // Global Navigation
         if (text === '/start' || text === '🏠 Main Menu' || text === 'Main Menu') {
-          delete adminState[chatId];
+          delete sessionState[chatId];
           await sendMainMenu(chatId);
           return res.status(200).json({ ok: true });
         }
 
         // Admin Interactive State Machine (.txt Upload / Add Service / Add Country / Broadcast)
-        if (isUserAdmin && adminState[chatId]?.step) {
-          const state = adminState[chatId];
+        if (isUserAdmin && sessionState[chatId]?.step) {
+          const state = sessionState[chatId];
+
+          if (text === '🏠 Main Menu' || text === 'Main Menu' || text === '/start') {
+            delete sessionState[chatId];
+            await sendMainMenu(chatId);
+            return res.status(200).json({ ok: true });
+          }
 
           if (state.step === 'WAITING_SERVICE') {
             const matched = getServices(true).find(s => text.toLowerCase().includes(s.name.toLowerCase())) || { id: text.toLowerCase().replace(/[^a-z]/g, ''), name: text, icon: '📱' };
@@ -335,7 +380,7 @@ module.exports = async function handler(req, res) {
           if (state.step === 'WAITING_COUNTRY') {
             const countryObj = addCountry(text);
             const result = addStock(state.serviceId, countryObj.code, state.numbers);
-            delete adminState[chatId];
+            delete sessionState[chatId];
 
             await sendAdminPanel(chatId);
             await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `✅ **Stock Uploaded!** Added ${result.addedCount} numbers for ${state.serviceId.toUpperCase()} (${countryObj.name}).`, parse_mode: 'Markdown' });
@@ -343,7 +388,7 @@ module.exports = async function handler(req, res) {
           }
 
           if (state.step === 'WAITING_ADD_SERVICE') {
-            delete adminState[chatId];
+            delete sessionState[chatId];
             const added = addService(text.toLowerCase().replace(/\s+/g, ''), text, getServiceIcon(text));
             await sendAdminPanel(chatId);
             await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `✅ Service ${added.icon} **${added.name}** added!` });
@@ -351,10 +396,38 @@ module.exports = async function handler(req, res) {
           }
 
           if (state.step === 'WAITING_ADD_COUNTRY') {
-            delete adminState[chatId];
+            delete sessionState[chatId];
             const countryObj = addCountry(text);
             await sendAdminPanel(chatId);
             await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `✅ Country ${countryObj.flag} **${countryObj.name}** (\`${countryObj.code}\`) added!` });
+            return res.status(200).json({ ok: true });
+          }
+
+          if (state.step === 'WAITING_BAN_USER') {
+            delete sessionState[chatId];
+            banUser(text);
+            await sendAdminPanel(chatId);
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `🚫 User \`${text}\` banned!` });
+            return res.status(200).json({ ok: true });
+          }
+
+          if (state.step === 'WAITING_UNBAN_USER') {
+            delete sessionState[chatId];
+            unbanUser(text);
+            await sendAdminPanel(chatId);
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `✅ User \`${text}\` unbanned!` });
+            return res.status(200).json({ ok: true });
+          }
+
+          if (state.step === 'WAITING_BROADCAST_MSG') {
+            delete sessionState[chatId];
+            const users = getAllUsers();
+            let count = 0;
+            for (const uId of users) {
+              try { await sendTelegramRequest('sendMessage', { chat_id: uId, text: `📢 **Announcement:**\n\n${text}` }); count++; } catch (e) {}
+            }
+            await sendAdminPanel(chatId);
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `✅ Broadcast sent to ${count}/${users.length} users!` });
             return res.status(200).json({ ok: true });
           }
         }
@@ -380,12 +453,11 @@ module.exports = async function handler(req, res) {
               const serviceId = caption[0].toLowerCase();
               const countryCode = caption[1].toUpperCase();
               const result = addStock(serviceId, countryCode, numberLines);
-              const flag = getFlagEmoji(countryCode);
 
               await sendAdminPanel(chatId);
               await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `✅ **Stock Uploaded!** Added ${result.addedCount} numbers for ${serviceId.toUpperCase()} (${countryCode}).`, parse_mode: 'Markdown' });
             } else {
-              adminState[chatId] = { step: 'WAITING_SERVICE', numbers: numberLines };
+              sessionState[chatId] = { step: 'WAITING_SERVICE', numbers: numberLines };
               await sendServiceSelection(chatId);
             }
           } catch (err) {
@@ -394,65 +466,216 @@ module.exports = async function handler(req, res) {
           return res.status(200).json({ ok: true });
         }
 
-        // User Buttons Routing
-        if (text === 'Get Number' || text === '📲 Get Number' || text.includes('Get Number') || text === '⬅️ Back to Services') {
+        // ---------------------------------------------------------
+        // EXACT BUTTON MATCHERS (PREVENT UNWANTED MAIN MENU KICKOUTS)
+        // ---------------------------------------------------------
+        const cleanText = text.trim();
+
+        // 1. Get Number & Services Router
+        if (cleanText === 'Get Number' || cleanText === '📲 Get Number' || cleanText.includes('Get Number') || cleanText === '⬅️ Back to Services' || cleanText === '/getnumber') {
           await sendServiceSelection(chatId);
-        } else if (text === 'Support' || text === '📞 Support' || text.includes('Support')) {
+          return res.status(200).json({ ok: true });
+        }
+
+        // 2. Support
+        if (cleanText === 'Support' || cleanText === '📞 Support' || cleanText.includes('Support') || cleanText === '/support') {
           await sendTelegramRequest('sendMessage', {
             chat_id: chatId,
-            text: "💎 **Bro's Number Bot — Support Center** 💎\n\nContact Admin:",
+            text: "💎 **Bro's Number Bot — Support Center** 💎\n\nNeed help with virtual numbers or OTPs? Contact Admin below:",
             reply_markup: { inline_keyboard: [[{ text: "👨‍💻 Admin Contact", url: "https://t.me/Prime90999" }]] }
           });
-        } else if (text === 'My Profile' || text === '👤 My Profile' || text.includes('Profile')) {
+          return res.status(200).json({ ok: true });
+        }
+
+        // 3. User Profile
+        if (cleanText === 'My Profile' || cleanText === '👤 My Profile' || cleanText.includes('Profile') || cleanText === '/profile') {
           const todayOtp = getUserOtpCount(chatId);
           await sendMainMenu(chatId, `👤 **USER PROFILE**\n\n🆔 User ID: \`${chatId}\`\n📱 Today OTP: ${todayOtp}`);
-        } else if (text === 'Search OTP' || text === '🔎 Search OTP' || text.includes('Search OTP')) {
+          return res.status(200).json({ ok: true });
+        }
+
+        // 4. Search OTP Prompt
+        if (cleanText === 'Search OTP' || cleanText === '🔎 Search OTP' || cleanText === '/searchotp') {
           await sendMainMenu(chatId, "🔎 **Search OTP**\n\nPlease reply with your **Phone Number** (e.g. `+255710962660`):");
-        } else if (text === 'Admin Panel' || text === '⚙️ Admin Panel' || text.includes('Admin')) {
+          return res.status(200).json({ ok: true });
+        }
+
+        // 5. Admin Panel Dashboard
+        if (cleanText === 'Admin Panel' || cleanText === '⚙️ Admin Panel' || cleanText === '/admin') {
           if (isUserAdmin) {
             await sendAdminPanel(chatId);
           } else {
             await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "⚠️ Access Denied!" });
           }
-        } else if (text === '📦 Stock Breakdown' && isUserAdmin) {
-          const summary = getAllStockSummary();
-          let msg = `📦 **CURRENT BOT STOCK BREAKDOWN**\n\n`;
-          summary.filter(s => s.count > 0).forEach(s => { msg += `${s.serviceIcon} ${s.service} | ${s.flag} ${s.country}: **${s.count} in stock**\n`; });
-          await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg || "⚠️ No stock available." });
-        } else if (text === '➕ Add Service' && isUserAdmin) {
-          adminState[chatId] = { step: 'WAITING_ADD_SERVICE' };
-          await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "➕ **ADD NEW SERVICE**\n\nPlease type the Service Name:" });
-        } else if (text === '➕ Add Country' && isUserAdmin) {
-          adminState[chatId] = { step: 'WAITING_ADD_COUNTRY' };
-          await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "➕ **ADD NEW COUNTRY**\n\nPlease type Country Name or Code:" });
-        } else if (text === '🧪 Test Group Post' && isUserAdmin) {
-          const sampleCard = buildOTPFormattedCard('facebook', 'TZ', '+255710962660', '<#> 66473 ni msimbo wako wa Facebook H29Q+Fsn4Sr', '66473');
-          await logToGroup(sampleCard);
-          await sendAdminPanel(chatId);
-          await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "✅ Test Group Post Sent!" });
-        } else {
-          // Check matching Services / Countries
-          const matchedSvc = getServices(true).find(s => text.toLowerCase().includes(s.name.toLowerCase()));
-          const matchedCountry = getCountries().find(c => text.toUpperCase().includes(c.code) || text.toUpperCase().includes(c.name));
+          return res.status(200).json({ ok: true });
+        }
 
-          if (matchedCountry) {
-            const svcId = adminState[chatId]?.lastServiceId || 'whatsapp';
-            await sendDispensed4Numbers(chatId, svcId, matchedCountry.code);
-          } else if (matchedSvc) {
-            adminState[chatId] = { ...(adminState[chatId] || {}), lastServiceId: matchedSvc.id };
-            await sendCountrySelection(chatId, matchedSvc.id);
-          } else {
-            // Search OTP by input number
-            const found = searchOTPByNumber(text);
-            if (found && found.data.fullMessage) {
-              const card = buildOTPFormattedCard(found.data.serviceId, found.data.countryCode, found.number, found.data.fullMessage, found.data.otpCode);
-              await sendTelegramRequest('sendMessage', { chat_id: chatId, ...card });
-            } else {
-              await sendMainMenu(chatId);
-            }
+        // 6. Admin Panel Options
+        if (isUserAdmin) {
+          if (cleanText.includes('Stock Breakdown')) {
+            const summary = getAllStockSummary();
+            let msg = `📦 **CURRENT BOT STOCK BREAKDOWN**\n\n`;
+            summary.filter(s => s.count > 0).forEach(s => { msg += `${s.serviceIcon} ${s.service} | ${s.flag} ${s.country}: **${s.count} in stock**\n`; });
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg || "⚠️ No stock available." });
+            return res.status(200).json({ ok: true });
+          }
+
+          if (cleanText.includes('Add Stock')) {
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "📥 **ADD STOCK (.txt)**\n\nPlease upload a `.txt` stock file, or attach caption: `<service> <country_code>`\n\nExample caption: `whatsapp US`" });
+            return res.status(200).json({ ok: true });
+          }
+
+          if (cleanText.includes('Live Traffic Details') || cleanText.includes('Radar') || cleanText.includes('Live Ranges')) {
+            await sendLiveTrafficWithRangeKeyboard(chatId);
+            return res.status(200).json({ ok: true });
+          }
+
+          if (cleanText.includes('Broadcast')) {
+            sessionState[chatId] = { step: 'WAITING_BROADCAST_MSG' };
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "📢 **BROADCAST**\n\nPlease type your announcement message:" });
+            return res.status(200).json({ ok: true });
+          }
+
+          if (cleanText.includes('Add Service')) {
+            sessionState[chatId] = { step: 'WAITING_ADD_SERVICE' };
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "➕ **ADD NEW SERVICE**\n\nPlease type Service Name:" });
+            return res.status(200).json({ ok: true });
+          }
+
+          if (cleanText.includes('Delete Service')) {
+            const svcs = getServices(true);
+            let msg = "❌ **DELETE SERVICE**\n\nSend command: `/delservice <service_id>`\nAvailable: " + svcs.map(s => s.id).join(', ');
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg });
+            return res.status(200).json({ ok: true });
+          }
+
+          if (cleanText.includes('Toggle Services')) {
+            const svcs = getServices(true);
+            let msg = "🔄 **TOGGLE SERVICES**\n\n" + svcs.map(s => `${s.icon} ${s.name}: ${s.enabled ? '🟢 ON' : '🔴 OFF'}`).join('\n');
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg });
+            return res.status(200).json({ ok: true });
+          }
+
+          if (cleanText.includes('Add Country')) {
+            sessionState[chatId] = { step: 'WAITING_ADD_COUNTRY' };
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "➕ **ADD NEW COUNTRY**\n\nPlease type Country Name or Code:" });
+            return res.status(200).json({ ok: true });
+          }
+
+          if (cleanText.includes('Delete Country')) {
+            const cList = getCountries();
+            let msg = "❌ **DELETE COUNTRY**\n\nSend command: `/delcountry <code/name>`\nAvailable: " + cList.map(c => c.code).join(', ');
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg });
+            return res.status(200).json({ ok: true });
+          }
+
+          if (cleanText.includes('Ban User')) {
+            sessionState[chatId] = { step: 'WAITING_BAN_USER' };
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "🚫 **BAN USER**\n\nPlease reply with User ID:" });
+            return res.status(200).json({ ok: true });
+          }
+
+          if (cleanText.includes('Unban User')) {
+            sessionState[chatId] = { step: 'WAITING_UNBAN_USER' };
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "✅ **UNBAN USER**\n\nPlease reply with User ID:" });
+            return res.status(200).json({ ok: true });
+          }
+
+          if (cleanText.includes('User Info')) {
+            const users = getAllUsers();
+            let msg = `👤 **TOTAL REGISTERED USERS:** \`${users.length}\`\n\n`;
+            users.slice(0, 10).forEach(u => { msg += `• User ID: \`${u}\` | Today OTP: ${getUserOtpCount(u)}\n`; });
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg, parse_mode: 'Markdown' });
+            return res.status(200).json({ ok: true });
+          }
+
+          if (cleanText.includes('Export Stock')) {
+            const exp = exportStock();
+            let msg = `📥 **EXPORTED STOCK SUMMARY**\n\nTotal Lines: \`${exp.totalLines}\`\n\n`;
+            exp.items.forEach(i => { msg += `${i.service} | ${i.country}: ${i.count} numbers\n`; });
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg, parse_mode: 'Markdown' });
+            return res.status(200).json({ ok: true });
+          }
+
+          if (cleanText.includes('Maint:')) {
+            const current = getMaintenance();
+            setMaintenance(!current);
+            await sendAdminPanel(chatId);
+            return res.status(200).json({ ok: true });
+          }
+
+          if (cleanText.includes('Test Group Post')) {
+            const sampleCard = buildOTPFormattedCard('facebook', 'TZ', '+255710962660', '<#> 66473 ni msimbo wako wa Facebook H29Q+Fsn4Sr', '66473');
+            await logToGroup(sampleCard);
+            await sendAdminPanel(chatId);
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "✅ Test OTP Card posted to Group!" });
+            return res.status(200).json({ ok: true });
+          }
+
+          if (cleanText.includes('Clear Stock')) {
+            clearAllStock();
+            await sendAdminPanel(chatId);
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "✅ All stock cleared successfully!" });
+            return res.status(200).json({ ok: true });
           }
         }
 
+        // 7. Check IVAS Live Range Button Clicks (Radar Detector)
+        const allRanges = getLiveRanges();
+        const matchedRange = allRanges.find(r => cleanText.includes(r.rangeName) || r.rangeName.includes(cleanText.replace(/^[^\w\s]/g, '').trim()));
+        if (matchedRange) {
+          let msg = `📌 **LIVE IVAS RADAR DETAILS: ${matchedRange.flag} ${matchedRange.rangeName}**\n\n`;
+          msg += `🌍 Country: ${matchedRange.flag} **${matchedRange.country}**\n`;
+          msg += `📱 Live Test Number: \`${matchedRange.phoneNumber}\`\n`;
+          msg += `📘 Service: **${matchedRange.sid}**\n`;
+          msg += `🕒 Last Activity: \`${matchedRange.time}\`\n\n`;
+          msg += `💡 **Action:** To dispense 4 numbers for this range, click **Get Number** or select country!`;
+          await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg, parse_mode: 'Markdown' });
+          return res.status(200).json({ ok: true });
+        }
+
+        // 8. Dynamic Service Matching
+        const allSvcs = getServices(true);
+        const matchedSvc = allSvcs.find(s => 
+          cleanText.toLowerCase() === s.name.toLowerCase() ||
+          cleanText.toLowerCase() === s.id.toLowerCase() ||
+          cleanText.toLowerCase().includes(s.name.toLowerCase()) ||
+          s.name.toLowerCase().includes(cleanText.toLowerCase().replace(/^[^\w\s]/g, '').trim())
+        );
+
+        if (matchedSvc) {
+          sessionState[chatId] = { ...(sessionState[chatId] || {}), lastServiceId: matchedSvc.id };
+          await sendCountrySelection(chatId, matchedSvc.id);
+          return res.status(200).json({ ok: true });
+        }
+
+        // 9. Dynamic Country Matching (Dispenses 4 Numbers)
+        const allCountries = getCountries();
+        const matchedCountry = allCountries.find(c => 
+          cleanText.toUpperCase().includes(c.code) || 
+          cleanText.toUpperCase().includes(c.name)
+        );
+
+        if (matchedCountry) {
+          const svcId = sessionState[chatId]?.lastServiceId || 'whatsapp';
+          await sendDispensed4Numbers(chatId, svcId, matchedCountry.code);
+          return res.status(200).json({ ok: true });
+        }
+
+        // 10. OTP Search by Number Input
+        if (!cleanText.startsWith('/') && cleanText.replace(/\D/g, '').length >= 6) {
+          const found = searchOTPByNumber(cleanText);
+          if (found && found.data.fullMessage) {
+            const card = buildOTPFormattedCard(found.data.serviceId, found.data.countryCode, found.number, found.data.fullMessage, found.data.otpCode);
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, ...card });
+          } else {
+            await sendMainMenu(chatId, `⚠️ **No OTP Received Yet!**\n\nNo active SMS found for \`${cleanText}\`. Please wait or search again.`);
+          }
+          return res.status(200).json({ ok: true });
+        }
+
+        // Default Main Menu Fallback
+        await sendMainMenu(chatId);
         return res.status(200).json({ ok: true });
       }
     }
