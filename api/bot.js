@@ -754,10 +754,10 @@ module.exports = async function handler(req, res) {
             }
           });
         }
-        return res.status(200).json({ ok: true });
-      }
+               return res.status(200).json({ ok: true });
+     }
 
-      // Handle Text Messages & File Uploads
+   // Handle Text Messages & File Uploads
       if (update.message) {
         const message = update.message;
         if (!message.chat) return res.status(200).json({ ok: true });
