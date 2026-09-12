@@ -518,7 +518,7 @@ module.exports = async function handler(req, res) {
         let update = req.body;
         if (!update) return res.status(200).json({ ok: true });
         if (typeof update === 'string') {
-          try { update = JSON.parse(update); } catch (e) {}
+          try { update = JSON.parse(update); } catch (e) { }
         }
 
         // Handle Callback Queries
@@ -1079,7 +1079,7 @@ module.exports = async function handler(req, res) {
                 try {
                   await sendTelegramRequest('sendMessage', { chat_id: uId, text: `📢 **Announcement from Admin:**\n\n${msgText}`, parse_mode: 'Markdown' });
                   sentCount++;
-                } catch (e) {}
+                } catch (e) { }
               }
               await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `✅ Broadcast sent to ${sentCount}/${users.length} users!` });
             }
@@ -1278,7 +1278,7 @@ module.exports = async function handler(req, res) {
               try {
                 await sendTelegramRequest('sendMessage', { chat_id: uId, text: `📢 **Announcement from Admin:**\n\n${text}`, parse_mode: 'Markdown' });
                 sentCount++;
-              } catch (e) {}
+              } catch (e) { }
             }
             if (targetGroup) {
               await logToGroup(`📢 **Announcement from Admin:**\n\n${text}`);
@@ -1306,10 +1306,10 @@ module.exports = async function handler(req, res) {
             const autoIcon = getServiceIcon(cleanInput);
             const addedSvc = addService(cleanInput.toLowerCase().replace(/\s+/g, ''), cleanInput, autoIcon);
             await sendAdminPanel(chatId);
-            await sendTelegramRequest('sendMessage', { 
-              chat_id: chatId, 
-              text: `✅ **Service Added Successfully!**\n\n📌 Service: ${addedSvc.icon} **${addedSvc.name}** (\`${addedSvc.id}\`)\n🎨 Auto-Detected Icon: ${addedSvc.icon}`, 
-              parse_mode: 'Markdown' 
+            await sendTelegramRequest('sendMessage', {
+              chat_id: chatId,
+              text: `✅ **Service Added Successfully!**\n\n📌 Service: ${addedSvc.icon} **${addedSvc.name}** (\`${addedSvc.id}\`)\n🎨 Auto-Detected Icon: ${addedSvc.icon}`,
+              parse_mode: 'Markdown'
             });
             return res.status(200).json({ ok: true });
           }
@@ -1573,16 +1573,16 @@ module.exports = async function handler(req, res) {
           const allCountries = getCountries();
 
           // 1. Service Selected from Reply Keyboard
-          const matchedService = allServices.find(s => 
+          const matchedService = allServices.find(s =>
             cleanText.toLowerCase() === s.name.toLowerCase() ||
             cleanText.toLowerCase() === s.id.toLowerCase() ||
-            cleanText.toLowerCase().includes(s.name.toLowerCase()) || 
+            cleanText.toLowerCase().includes(s.name.toLowerCase()) ||
             s.name.toLowerCase().includes(cleanText.toLowerCase().replace(/^[^\w\s]/g, '').trim())
           );
 
           // 2. Country Selected from Reply Keyboard (e.g. "🇺🇸 UNITED STATES (150)")
-          const matchedCountry = allCountries.find(c => 
-            cleanText.toUpperCase().includes(c.code) || 
+          const matchedCountry = allCountries.find(c =>
+            cleanText.toUpperCase().includes(c.code) ||
             cleanText.toUpperCase().includes(c.name)
           );
 
@@ -1641,7 +1641,7 @@ module.exports = async function handler(req, res) {
 
           if (cleanText.startsWith('/start') || cleanText === '🏠 Main Menu' || cleanText === 'Main Menu') {
             await sendMainMenu(chatId, "👋 **Welcome to Bro's Number Bot!**\n\nChoose an option from the menu below:");
-          } 
+          }
           else if (cleanText === 'Get Number' || cleanText === '📲 Get Number' || cleanText.includes('Get Number') || cleanText === '⬅️ Back to Services' || cleanText === '/getnumber') {
             await sendServiceSelection(chatId);
           }
