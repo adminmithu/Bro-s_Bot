@@ -4,8 +4,9 @@
  */
 
 const {
-  getServices, getServiceIcon, toggleService, addService, deleteService, getCountries,
-  addCountry, deleteCountry, addStock, buildStockAddedCard, getAllStockSummary, exportStock,
+  getServices, getServiceIcon, toggleService, addService, deleteService, clearAllServices,
+  getCountries, addCountry, deleteCountry, toggleCountry, clearAllCountries,
+  addStock, buildStockAddedCard, getAllStockSummary, exportStock,
   get4Numbers, getStockCount, clearAllStock, getLiveTrafficAnalytics,
   searchOTPByNumber, processIncomingSMS, buildOTPFormattedCard, getUserOtpCount,
   getUserInfo, banUser, unbanUser, isUserBanned, setMaintenance,
@@ -222,19 +223,90 @@ async function sendAdminPanel(chatId) {
 
   const keyboard = [
     [{ text: "Add Stock (.txt)", style: "success" }, { text: "Stock Breakdown", style: "primary" }],
-    [{ text: "Live Traffic Details", style: "primary" }, { text: "Broadcast", style: "success" }],
+    [{ text: "Toggle Services", style: "primary" }, { text: "Toggle Countries", style: "primary" }],
     [{ text: "Add Service", style: "success" }, { text: "Delete Service", style: "danger" }],
-    [{ text: "Toggle Services", style: "primary" }, { text: "Add Country", style: "success" }],
-    [{ text: "Delete Country", style: "danger" }, { text: "Ban User", style: "danger" }],
-    [{ text: "Unban User", style: "success" }, { text: "User Info", style: "primary" }],
-    [{ text: "Export Stock", style: "primary" }, { text: "Test Group Post", style: "success" }],
+    [{ text: "Add Country", style: "success" }, { text: "Delete Country", style: "danger" }],
+    [{ text: "Clear Services", style: "danger" }, { text: "Clear Countries", style: "danger" }],
+    [{ text: "Live Traffic Details", style: "primary" }, { text: "Broadcast", style: "success" }],
+    [{ text: "Ban User", style: "danger" }, { text: "Unban User", style: "success" }],
+    [{ text: "User Info", style: "primary" }, { text: "Export Stock", style: "primary" }],
     [{ text: `Maint: ${isMaint ? 'ON' : 'OFF'}`, style: "danger" }, { text: "Clear Stock", style: "danger" }],
-    [{ text: "Main Menu", style: "primary" }]
+    [{ text: "Test Group Post", style: "success" }, { text: "Main Menu", style: "primary" }]
   ];
 
   return await sendTelegramRequest('sendMessage', {
     chat_id: chatId,
     text: stockText,
+    parse_mode: 'Markdown',
+    reply_markup: { keyboard, resize_keyboard: true, is_persistent: true }
+  });
+}
+
+// Toggle Services Keyboard (Reply Keyboard with ON/OFF toggle buttons)
+async function sendToggleServicesMenu(chatId, noticeText = "") {
+  const services = getServices(true);
+  let text = noticeText ? `${noticeText}\n\n` : "";
+  text += `🔄 **TOGGLE SERVICES (ANYTIME ON/OFF)**\n\nTap any service button below to toggle it ON or OFF instantly:`;
+
+  if (services.length === 0) {
+    text += `\n\n⚠️ _No services available. Tap "Add Service" to create one._`;
+  }
+
+  const keyboard = [];
+  for (let i = 0; i < services.length; i += 2) {
+    const s1 = services[i];
+    const icon1 = s1.icon || getServiceIcon(s1.name);
+    const status1 = s1.enabled !== false ? '🟢 ON' : '🔴 OFF';
+    const row = [{ text: `TOGGLE_SVC:${s1.id} | ${icon1} ${s1.name.toUpperCase()} ${status1}` }];
+
+    if (services[i + 1]) {
+      const s2 = services[i + 1];
+      const icon2 = s2.icon || getServiceIcon(s2.name);
+      const status2 = s2.enabled !== false ? '🟢 ON' : '🔴 OFF';
+      row.push({ text: `TOGGLE_SVC:${s2.id} | ${icon2} ${s2.name.toUpperCase()} ${status2}` });
+    }
+    keyboard.push(row);
+  }
+  keyboard.push([{ text: "⬅️ Back to Admin Panel" }]);
+
+  return await sendTelegramRequest('sendMessage', {
+    chat_id: chatId,
+    text: text,
+    parse_mode: 'Markdown',
+    reply_markup: { keyboard, resize_keyboard: true, is_persistent: true }
+  });
+}
+
+// Toggle Countries Keyboard (Reply Keyboard with ON/OFF toggle buttons)
+async function sendToggleCountriesMenu(chatId, noticeText = "") {
+  const countries = getCountries(true);
+  let text = noticeText ? `${noticeText}\n\n` : "";
+  text += `🌍 **TOGGLE COUNTRIES (ANYTIME ON/OFF)**\n\nTap any country button below to toggle it ON or OFF instantly:`;
+
+  if (countries.length === 0) {
+    text += `\n\n⚠️ _No countries available. Tap "Add Country" to create one._`;
+  }
+
+  const keyboard = [];
+  for (let i = 0; i < countries.length; i += 2) {
+    const c1 = countries[i];
+    const flag1 = c1.flag || '🌐';
+    const status1 = c1.enabled !== false ? '🟢 ON' : '🔴 OFF';
+    const row = [{ text: `TOGGLE_CTRY:${c1.code} | ${flag1} ${c1.name.toUpperCase()} ${status1}` }];
+
+    if (countries[i + 1]) {
+      const c2 = countries[i + 1];
+      const flag2 = c2.flag || '🌐';
+      const status2 = c2.enabled !== false ? '🟢 ON' : '🔴 OFF';
+      row.push({ text: `TOGGLE_CTRY:${c2.code} | ${flag2} ${c2.name.toUpperCase()} ${status2}` });
+    }
+    keyboard.push(row);
+  }
+  keyboard.push([{ text: "⬅️ Back to Admin Panel" }]);
+
+  return await sendTelegramRequest('sendMessage', {
+    chat_id: chatId,
+    text: text,
     parse_mode: 'Markdown',
     reply_markup: { keyboard, resize_keyboard: true, is_persistent: true }
   });
@@ -345,29 +417,111 @@ module.exports = async function handler(req, res) {
         if (isUserAdmin && sessionState[chatId]?.step) {
           const state = sessionState[chatId];
 
-          if (lowerText.includes('main menu') || lowerText === '/start') {
+          if (lowerText.includes('main menu') || lowerText === '/start' || lowerText === '/cancel') {
             delete sessionState[chatId];
             await sendMainMenu(chatId);
             return res.status(200).json({ ok: true });
           }
 
-          if (state.step === 'WAITING_SERVICE') {
-            const matched = getServices(true).find(s => text.toLowerCase().includes(s.name.toLowerCase())) || { id: text.toLowerCase().replace(/[^a-z]/g, ''), name: text, icon: '📱' };
-            state.serviceId = matched.id;
-            state.step = 'WAITING_COUNTRY';
-            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `📌 **Service Set:** ${matched.name}\n\nNow select or type Country Code (e.g. \`US\`, \`BD\`, \`UK\`):` });
-            return res.status(200).json({ ok: true });
+          if (state.step === 'WAITING_TXT_FILE') {
+            if (!message.document) {
+              await sendTelegramRequest('sendMessage', {
+                chat_id: chatId,
+                text: "📥 **ADD STOCK (STEP 1/3)**\n\nPlease upload or send a `.txt` stock file containing phone numbers.",
+                parse_mode: 'Markdown'
+              });
+              return res.status(200).json({ ok: true });
+            }
           }
 
           if (state.step === 'WAITING_COUNTRY') {
             const countryObj = addCountry(text);
-            const result = addStock(state.serviceId, countryObj.code, state.numbers);
+            state.countryObj = countryObj;
+            state.step = 'WAITING_SERVICE';
+
+            const svcs = getServices(true);
+            const svcButtons = [];
+            for (let i = 0; i < svcs.length; i += 2) {
+              const row = [{ text: `${svcs[i].icon} ${svcs[i].name}` }];
+              if (svcs[i + 1]) row.push({ text: `${svcs[i + 1].icon} ${svcs[i + 1].name}` });
+              svcButtons.push(row);
+            }
+            svcButtons.push([{ text: "🏠 Main Menu" }]);
+
+            await sendTelegramRequest('sendMessage', {
+              chat_id: chatId,
+              text: `📌 **Country Set:** ${countryObj.flag} **${countryObj.name}** (\`${countryObj.code}\`)\n\n📱 **ADD STOCK (STEP 3/3) — SELECT / TYPE SERVICE**\n\nWhich service is this stock for?\nSelect or type service name (e.g. \`WhatsApp\`, \`Facebook\`, \`IMO\`):\n\n_Note: If service doesn't exist, bot will automatically create & add it!_`,
+              parse_mode: 'Markdown',
+              reply_markup: { keyboard: svcButtons, resize_keyboard: true, is_persistent: true }
+            });
+            return res.status(200).json({ ok: true });
+          }
+
+          if (state.step === 'WAITING_SERVICE') {
+            const countryObj = state.countryObj || { code: 'GLOBAL', name: 'GLOBAL', flag: '🌐' };
+            const cleanSvcName = text.replace(/^[^\w\s]/g, '').trim() || text.trim();
+            let serviceObj = getServices(true).find(s => 
+              s.name.toLowerCase() === cleanSvcName.toLowerCase() ||
+              s.id.toLowerCase() === cleanSvcName.toLowerCase() ||
+              text.toLowerCase().includes(s.name.toLowerCase())
+            );
+
+            let createdNotice = "";
+            if (!serviceObj) {
+              const cleanId = cleanSvcName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'service';
+              serviceObj = addService(cleanId, cleanSvcName, getServiceIcon(cleanSvcName));
+              createdNotice = `✨ **Created new service:** ${serviceObj.icon} **${serviceObj.name}**\n\n`;
+            }
+
+            const result = addStock(serviceObj.id, countryObj.code, state.numbers || []);
+            state.step = 'ASK_ADD_MORE_STOCK';
+
+            await logToGroup(buildStockAddedCard(countryObj.name, countryObj.code, result.addedCount, state.numbers || []));
+
+            const confirmKeyboard = {
+              keyboard: [
+                [{ text: "➕ Yes, Add More Stock" }, { text: "❌ No, Finish & Back to Admin" }]
+              ],
+              resize_keyboard: true,
+              is_persistent: true
+            };
+
+            const confirmMsg = `${createdNotice}╔═══════════════════════════════════════╗\n   ✅ **STOCK UPLOADED SUCCESSFULLY!**\n╚═══════════════════════════════════════╝\n\n🌐 **Country:** ${countryObj.flag} **${countryObj.name}** (\`${countryObj.code}\`)\n📱 **Service:** ${serviceObj.icon} **${serviceObj.name}**\n📊 **Added Numbers:** \`${result.addedCount}\`\n\n❓ **Do you want to add more stock?**`;
+
+            await sendTelegramRequest('sendMessage', {
+              chat_id: chatId,
+              text: confirmMsg,
+              parse_mode: 'Markdown',
+              reply_markup: confirmKeyboard
+            });
+            return res.status(200).json({ ok: true });
+          }
+
+          if (state.step === 'ASK_ADD_MORE_STOCK') {
+            if (lowerText.includes('yes') || cleanText.includes('➕')) {
+              state.step = 'WAITING_TXT_FILE';
+              await sendTelegramRequest('sendMessage', {
+                chat_id: chatId,
+                text: "📥 **ADD STOCK (STEP 1/3)**\n\nPlease upload or send your next `.txt` stock file containing phone numbers:",
+                parse_mode: 'Markdown'
+              });
+            } else {
+              delete sessionState[chatId];
+              await sendAdminPanel(chatId);
+            }
+            return res.status(200).json({ ok: true });
+          }
+
+          if (state.step === 'WAITING_CLEAR_STOCK_CONFIRM') {
             delete sessionState[chatId];
-
-            await logToGroup(buildStockAddedCard(countryObj.name, countryObj.code, result.addedCount, state.numbers));
-
-            await sendAdminPanel(chatId);
-            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `✅ **Stock Uploaded & Broadcasted!** Added ${result.addedCount} numbers for ${state.serviceId.toUpperCase()} (${countryObj.name}).`, parse_mode: 'Markdown' });
+            if (cleanText.includes('Yes') || cleanText.includes('⚠️')) {
+              clearAllStock();
+              await sendAdminPanel(chatId);
+              await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "✅ **All stock numbers cleared successfully!**", parse_mode: 'Markdown' });
+            } else {
+              await sendAdminPanel(chatId);
+              await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "❌ Clear Stock cancelled. All stock preserved!", parse_mode: 'Markdown' });
+            }
             return res.status(200).json({ ok: true });
           }
 
@@ -436,15 +590,43 @@ module.exports = async function handler(req, res) {
             if (caption.length >= 2) {
               const serviceId = caption[0].toLowerCase();
               const countryCode = caption[1].toUpperCase();
+              const countryObj = addCountry(countryCode, countryCode);
               const result = addStock(serviceId, countryCode, numberLines);
 
-              await logToGroup(buildStockAddedCard(countryCode, countryCode, result.addedCount, numberLines));
+              await logToGroup(buildStockAddedCard(countryObj.name, countryObj.code, result.addedCount, numberLines));
 
-              await sendAdminPanel(chatId);
-              await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `✅ **Stock Uploaded & Broadcasted!** Added ${result.addedCount} numbers for ${serviceId.toUpperCase()} (${countryCode}).`, parse_mode: 'Markdown' });
+              sessionState[chatId] = { step: 'ASK_ADD_MORE_STOCK' };
+              const confirmKeyboard = {
+                keyboard: [
+                  [{ text: "➕ Yes, Add More Stock" }, { text: "❌ No, Finish & Back to Admin" }]
+                ],
+                resize_keyboard: true,
+                is_persistent: true
+              };
+
+              await sendTelegramRequest('sendMessage', {
+                chat_id: chatId,
+                text: `✅ **Stock Uploaded & Broadcasted!** Added ${result.addedCount} numbers for ${serviceId.toUpperCase()} (${countryObj.name}).\n\n❓ **Do you want to add more stock?**`,
+                parse_mode: 'Markdown',
+                reply_markup: confirmKeyboard
+              });
             } else {
-              sessionState[chatId] = { step: 'WAITING_SERVICE', numbers: numberLines };
-              await sendServiceSelection(chatId);
+              sessionState[chatId] = { step: 'WAITING_COUNTRY', numbers: numberLines };
+              const cList = getCountries(true);
+              const cButtons = [];
+              for (let i = 0; i < cList.length; i += 2) {
+                const row = [{ text: `${cList[i].flag} ${cList[i].name}` }];
+                if (cList[i + 1]) row.push({ text: `${cList[i + 1].flag} ${cList[i + 1].name}` });
+                cButtons.push(row);
+              }
+              cButtons.push([{ text: "🏠 Main Menu" }]);
+
+              await sendTelegramRequest('sendMessage', {
+                chat_id: chatId,
+                text: `📄 **File Received! (${numberLines.length} numbers)**\n\n🌍 **ADD STOCK (STEP 2/3) — SELECT / TYPE COUNTRY**\n\nWhich country is this stock for?\nType country name or code (e.g. \`USA\`, \`Bangladesh\`, \`US\`, \`BD\`):\n\n_Bot will auto-match country code & flag emoji!_`,
+                parse_mode: 'Markdown',
+                reply_markup: { keyboard: cButtons, resize_keyboard: true }
+              });
             }
           } catch (err) {
             await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `❌ **Upload Error:** ${err.message}` });
@@ -503,8 +685,99 @@ module.exports = async function handler(req, res) {
           return res.status(200).json({ ok: true });
         }
 
-        // 6. Admin Panel Options
+        // 6. Admin Panel Options & Commands
         if (isUserAdmin) {
+          if (cleanText.includes('Back to Admin') || cleanText === '/admin') {
+            await sendAdminPanel(chatId);
+            return res.status(200).json({ ok: true });
+          }
+
+          // Service ON/OFF Toggle Handler
+          if (cleanText.startsWith('TOGGLE_SVC:')) {
+            const svcId = cleanText.split('TOGGLE_SVC:')[1].split('|')[0].trim();
+            const toggled = toggleService(svcId);
+            if (toggled) {
+              const statusStr = toggled.enabled !== false ? '🟢 ON' : '🔴 OFF';
+              await sendToggleServicesMenu(chatId, `✅ Service ${toggled.icon || '📱'} **${toggled.name}** is now ${statusStr}!`);
+            } else {
+              await sendToggleServicesMenu(chatId, `⚠️ Service not found.`);
+            }
+            return res.status(200).json({ ok: true });
+          }
+
+          // Country ON/OFF Toggle Handler
+          if (cleanText.startsWith('TOGGLE_CTRY:')) {
+            const cCode = cleanText.split('TOGGLE_CTRY:')[1].split('|')[0].trim();
+            const toggled = toggleCountry(cCode);
+            if (toggled) {
+              const statusStr = toggled.enabled !== false ? '🟢 ON' : '🔴 OFF';
+              await sendToggleCountriesMenu(chatId, `✅ Country ${toggled.flag || '🌐'} **${toggled.name}** (\`${toggled.code}\`) is now ${statusStr}!`);
+            } else {
+              await sendToggleCountriesMenu(chatId, `⚠️ Country not found.`);
+            }
+            return res.status(200).json({ ok: true });
+          }
+
+          if (cleanText.includes('Toggle Services') || lowerText === '/toggleservices') {
+            await sendToggleServicesMenu(chatId);
+            return res.status(200).json({ ok: true });
+          }
+
+          if (cleanText.includes('Toggle Countries') || lowerText === '/togglecountries') {
+            await sendToggleCountriesMenu(chatId);
+            return res.status(200).json({ ok: true });
+          }
+
+          if (cleanText.includes('Clear Services') || lowerText === '/clearservices') {
+            clearAllServices();
+            await sendAdminPanel(chatId);
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "✅ **All services have been cleared!**\n\nUse *Add Service* to add your preferred services.", parse_mode: 'Markdown' });
+            return res.status(200).json({ ok: true });
+          }
+
+          if (cleanText.includes('Clear Countries') || lowerText === '/clearcountries') {
+            clearAllCountries();
+            await sendAdminPanel(chatId);
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "✅ **All countries have been cleared!**\n\nUse *Add Country* to add your preferred countries.", parse_mode: 'Markdown' });
+            return res.status(200).json({ ok: true });
+          }
+
+          if (lowerText.startsWith('/delservice') || lowerText.startsWith('/deleteservice')) {
+            const parts = cleanText.split(/\s+/);
+            if (parts.length >= 2) {
+              const deleted = deleteService(parts[1]);
+              await sendAdminPanel(chatId);
+              if (deleted) {
+                await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `✅ Service ${deleted.icon || '📱'} **${deleted.name}** deleted successfully!`, parse_mode: 'Markdown' });
+              } else {
+                await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `⚠️ Service \`${parts[1]}\` not found.`, parse_mode: 'Markdown' });
+              }
+            } else {
+              const svcs = getServices(true);
+              let msg = "❌ **DELETE SERVICE**\n\nSend command: `/delservice <service_id>`\nAvailable: " + (svcs.map(s => s.id).join(', ') || 'None');
+              await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg, parse_mode: 'Markdown' });
+            }
+            return res.status(200).json({ ok: true });
+          }
+
+          if (lowerText.startsWith('/delcountry') || lowerText.startsWith('/deletecountry')) {
+            const parts = cleanText.split(/\s+/);
+            if (parts.length >= 2) {
+              const deleted = deleteCountry(parts[1]);
+              await sendAdminPanel(chatId);
+              if (deleted) {
+                await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `✅ Country ${deleted.flag || '🌐'} **${deleted.name}** (\`${deleted.code}\`) deleted successfully!`, parse_mode: 'Markdown' });
+              } else {
+                await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `⚠️ Country \`${parts[1]}\` not found.`, parse_mode: 'Markdown' });
+              }
+            } else {
+              const cList = getCountries(true);
+              let msg = "❌ **DELETE COUNTRY**\n\nSend command: `/delcountry <code/name>`\nAvailable: " + (cList.map(c => c.code).join(', ') || 'None');
+              await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg, parse_mode: 'Markdown' });
+            }
+            return res.status(200).json({ ok: true });
+          }
+
           if (cleanText.includes('Stock Breakdown')) {
             const summary = getAllStockSummary();
             let msg = `📦 **CURRENT BOT STOCK BREAKDOWN**\n\n`;
@@ -549,30 +822,9 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true });
           }
 
-          if (cleanText.includes('Delete Service')) {
-            const svcs = getServices(true);
-            let msg = "❌ **DELETE SERVICE**\n\nSend command: `/delservice <service_id>`\nAvailable: " + svcs.map(s => s.id).join(', ');
-            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg });
-            return res.status(200).json({ ok: true });
-          }
-
-          if (cleanText.includes('Toggle Services')) {
-            const svcs = getServices(true);
-            let msg = "🔄 **TOGGLE SERVICES**\n\n" + svcs.map(s => `${s.icon} ${s.name}: ${s.enabled ? '🟢 ON' : '🔴 OFF'}`).join('\n');
-            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg });
-            return res.status(200).json({ ok: true });
-          }
-
           if (cleanText.includes('Add Country')) {
             sessionState[chatId] = { step: 'WAITING_ADD_COUNTRY' };
             await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "➕ **ADD NEW COUNTRY**\n\nPlease type Country Name or Code:" });
-            return res.status(200).json({ ok: true });
-          }
-
-          if (cleanText.includes('Delete Country')) {
-            const cList = getCountries();
-            let msg = "❌ **DELETE COUNTRY**\n\nSend command: `/delcountry <code/name>`\nAvailable: " + cList.map(c => c.code).join(', ');
-            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg });
             return res.status(200).json({ ok: true });
           }
 
@@ -606,8 +858,13 @@ module.exports = async function handler(req, res) {
 
           if (cleanText.includes('Maint:')) {
             const current = getMaintenance();
-            setMaintenance(!current);
+            const updated = setMaintenance(!current);
             await sendAdminPanel(chatId);
+            await sendTelegramRequest('sendMessage', {
+              chat_id: chatId,
+              text: updated ? "🚧 **Bot is now in Maintenance Mode!**\nNon-admin users will see a maintenance message." : "🟢 **Maintenance Mode turned OFF.**\nBot is fully active for all users!",
+              parse_mode: 'Markdown'
+            });
             return res.status(200).json({ ok: true });
           }
 
@@ -619,10 +876,21 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true });
           }
 
-          if (cleanText.includes('Clear Stock')) {
-            clearAllStock();
-            await sendAdminPanel(chatId);
-            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "✅ All stock cleared successfully!" });
+          if (cleanText.includes('Clear Stock') || lowerText === '/clearstock') {
+            sessionState[chatId] = { step: 'WAITING_CLEAR_STOCK_CONFIRM' };
+            const confirmKeyboard = {
+              keyboard: [
+                [{ text: "⚠️ Yes, Clear All Stock" }, { text: "❌ Cancel & Keep Stock" }]
+              ],
+              resize_keyboard: true,
+              is_persistent: true
+            };
+            await sendTelegramRequest('sendMessage', {
+              chat_id: chatId,
+              text: "⚠️ **CONFIRMATION REQUIRED** ⚠️\n\nAre you sure you want to clear **ALL phone numbers** from stock?\n\n_This action will wipe all available numbers from the database!_",
+              parse_mode: 'Markdown',
+              reply_markup: confirmKeyboard
+            });
             return res.status(200).json({ ok: true });
           }
         }
@@ -642,7 +910,7 @@ module.exports = async function handler(req, res) {
         }
 
         // 8. Dynamic Service Matching
-        const allSvcs = getServices(true);
+        const allSvcs = getServices(false);
         const matchedSvc = allSvcs.find(s => 
           cleanText.toLowerCase() === s.name.toLowerCase() ||
           cleanText.toLowerCase() === s.id.toLowerCase() ||
@@ -657,11 +925,11 @@ module.exports = async function handler(req, res) {
         }
 
         // 9. Dynamic Country Matching (Dispenses 4 Numbers)
-        const allCountries = getCountries();
-        const matchedCountry = allCountries.find(c => 
+        const allCountries = getCountries(false);
+        const matchedCountry = !cleanText.startsWith('/') ? allCountries.find(c => 
           cleanText.toUpperCase().includes(c.code) || 
           cleanText.toUpperCase().includes(c.name)
-        );
+        ) : null;
 
         if (matchedCountry) {
           const svcId = sessionState[chatId]?.lastServiceId || 'whatsapp';

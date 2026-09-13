@@ -183,11 +183,36 @@ class IVASScraper:
 
     def start(self):
         self.login()
-        print("🚀 IVAS Scraper Started! Polling Link 1 (User + Group SMS)...")
+        print("🚀 IVAS Scraper Started! Polling Link 1 (User + Group SMS) in Real-Time...")
         while True:
             self.poll_link_1()
-            time.sleep(10)
+            time.sleep(3)
+
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
+        self.wfile.write(b"IVAS Scraper Web Service is Active & Running 24/7!")
+
+    def log_message(self, format, *args):
+        return  # Suppress HTTP access logs
+
+def start_health_server():
+    port = int(os.getenv("PORT", "10000"))
+    try:
+        server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+        print(f"🌐 Health check HTTP web server active on port {port}")
+        server.serve_forever()
+    except Exception as e:
+        print("Web server error:", e)
 
 if __name__ == "__main__":
+    health_thread = threading.Thread(target=start_health_server, daemon=True)
+    health_thread.start()
+
     scraper = IVASScraper()
     scraper.start()
