@@ -795,9 +795,37 @@ def handle_update(update):
                 if not c_info:
                     c_info = {'code': country_code, 'name': country_code, 'flag': get_flag_emoji(country_code)}
                     db_countries.append(c_info)
+
+                flag = c_info['flag']
+                country_name = c_info['name']
+
+                # Broadcast notification card to Group
+                broadcast_text = f"╔═══════════════════════════════════════╗\n" \
+                                 f"   🚀 **NEW NUMBERS ADDED TO STOCK!** 🚀\n" \
+                                 f"╚═══════════════════════════════════════╝\n\n" \
+                                 f"🌐 **Country:** {flag} **{country_name}** ({country_code}) {flag}\n" \
+                                 f"📊 **Total Added Numbers:** `1`\n\n" \
+                                 f"🔥 **সবাই কোপানো শুরু করেন কোড আসবে ১০০ ১০০!** 🔥\n\n" \
+                                 f"⚡ _Bro's Number Bot — Grab numbers now!_\n" \
+                                 f"________________________________________"
+
+                broadcast_card = {
+                    'text': broadcast_text,
+                    'parse_mode': 'Markdown',
+                    'reply_markup': {
+                        'inline_keyboard': [
+                            [
+                                {"text": "📲 Get Number ↗️", "url": "https://t.me/brosnumberbot?start=getnum"},
+                                {"text": "💬 Support 👨‍💻", "url": "https://t.me/Prime90999"}
+                            ]
+                        ]
+                    }
+                }
+                log_to_group(broadcast_card)
+
                 send_telegram_request("sendMessage", {
                     'chat_id': chat_id,
-                    'text': f"✅ **Number Added to Stock!**\n\n📌 Service: `{service_id.upper()}`\n🌐 Country: {c_info['flag']} {c_info['name']}\n📱 Number: `{num}`\n📊 Total Stock: {len(db_stock[key])}",
+                    'text': f"✅ **Number Added to Stock & Broadcasted!**\n\n📌 Service: `{service_id.upper()}`\n🌐 Country: {c_info['flag']} {c_info['name']}\n📱 Number: `{num}`\n📊 Total Stock: {len(db_stock[key])}",
                     'parse_mode': 'Markdown'
                 })
             return

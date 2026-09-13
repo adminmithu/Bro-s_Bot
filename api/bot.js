@@ -5,7 +5,7 @@
 
 const {
   getServices, getServiceIcon, toggleService, addService, deleteService, getCountries,
-  addCountry, deleteCountry, addStock, getAllStockSummary, exportStock,
+  addCountry, deleteCountry, addStock, buildStockAddedCard, getAllStockSummary, exportStock,
   get4Numbers, getStockCount, clearAllStock, getLiveTrafficAnalytics,
   searchOTPByNumber, processIncomingSMS, buildOTPFormattedCard, getUserOtpCount,
   getUserInfo, banUser, unbanUser, isUserBanned, setMaintenance,
@@ -168,71 +168,7 @@ async function sendDispensed4Numbers(chatId, serviceId, countryCode) {
   });
 }
 
-// Render Service Selection for IVAS Radar
-async function sendRadarServiceSelection(chatId) {
-  const services = getServices(false);
-  const keyboard = [];
 
-  for (let i = 0; i < services.length; i += 2) {
-    const row = [{ text: `${services[i].name.toUpperCase()} RADAR`, style: "primary" }];
-    if (services[i + 1]) {
-      row.push({ text: `${services[i + 1].name.toUpperCase()} RADAR`, style: "primary" });
-    }
-    keyboard.push(row);
-  }
-  keyboard.push([{ text: "ALL LIVE RANGES", style: "success" }]);
-  keyboard.push([{ text: "Admin Panel", style: "danger" }, { text: "Main Menu", style: "primary" }]);
-
-  return await sendTelegramRequest('sendMessage', {
-    chat_id: chatId,
-    text: "📡 **IVAS REAL-TIME LINK 2 RADAR DETECTOR** 📡\n\nPlease select an active Service below to view live ranges:",
-    parse_mode: 'Markdown',
-    reply_markup: { keyboard, resize_keyboard: true, is_persistent: true }
-  });
-}
-
-// Render Live Real-Time IVAS Radar Stream for a specific service
-async function sendLiveTrafficWithRangeKeyboard(chatId, serviceId = 'all') {
-  const liveRanges = getLiveRanges(serviceId);
-  const t = getLiveTrafficAnalytics();
-
-  let msg = `📡 **IVAS REAL-TIME LINK 2 RADAR DETECTOR** 📡\n`;
-  msg += `📌 Selected Service Filter: **${serviceId.toUpperCase()}**\n`;
-  msg += `Total OTPs Processed Today: \`${t.totalOtpsReceived}\`\n\n`;
-  msg += `🔥 **Active Ranges from IVAS Link 2 Stream:**\n\n`;
-
-  if (liveRanges.length === 0) {
-    msg += `ℹ️ _No live traffic ranges recorded for **${serviceId.toUpperCase()}** yet._\n\n💡 **Tip:** Keep your Tampermonkey userscript active on IVAS Link 2 (\`https://www.ivasms.com/portal/sms/test/sms\`) to stream active ranges in real-time!\n`;
-  } else {
-    liveRanges.slice(0, 8).forEach(r => {
-      msg += `**${r.rangeName}**\n`;
-      msg += `└ 📱 \`${r.phoneNumber}\` | 📘 **${r.sid}** | 🕒 \`${r.time}\`\n\n`;
-    });
-  }
-
-  msg += `\n👇 **Select any Active Range Name below to view details:**`;
-
-  const keyboard = [];
-  for (let i = 0; i < liveRanges.length && i < 8; i += 2) {
-    const r1 = liveRanges[i];
-    const row = [{ text: r1.rangeName.toUpperCase(), style: "primary" }];
-
-    if (liveRanges[i + 1]) {
-      const r2 = liveRanges[i + 1];
-      row.push({ text: r2.rangeName.toUpperCase(), style: "primary" });
-    }
-    keyboard.push(row);
-  }
-
-  keyboard.push([{ text: "📡 Radar Services", style: "success" }, { text: "Main Menu", style: "primary" }]);
-
-  return await sendTelegramRequest('sendMessage', {
-    chat_id: chatId,
-    text: msg,
-    parse_mode: 'Markdown',
-    reply_markup: { keyboard, resize_keyboard: true, is_persistent: true }
-  });
-}
 
 // Admin Panel Dashboard Keyboard
 async function sendAdminPanel(chatId) {
@@ -267,14 +203,14 @@ async function sendAdminPanel(chatId) {
 
   const keyboard = [
     [{ text: "Add Stock (.txt)", style: "success" }, { text: "Stock Breakdown", style: "primary" }],
-    [{ text: "Live Traffic Details", style: "primary" }, { text: "Radar / Live Ranges", style: "primary" }],
-    [{ text: "Broadcast", style: "success" }, { text: "Add Service", style: "success" }],
-    [{ text: "Delete Service", style: "danger" }, { text: "Toggle Services", style: "primary" }],
-    [{ text: "Add Country", style: "success" }, { text: "Delete Country", style: "danger" }],
-    [{ text: "Ban User", style: "danger" }, { text: "Unban User", style: "success" }],
-    [{ text: "User Info", style: "primary" }, { text: "Export Stock", style: "primary" }],
-    [{ text: "Test Group Post", style: "success" }, { text: `Maint: ${isMaint ? 'ON' : 'OFF'}`, style: "danger" }],
-    [{ text: "Clear Stock", style: "danger" }, { text: "Main Menu", style: "primary" }]
+    [{ text: "Live Traffic Details", style: "primary" }, { text: "Broadcast", style: "success" }],
+    [{ text: "Add Service", style: "success" }, { text: "Delete Service", style: "danger" }],
+    [{ text: "Toggle Services", style: "primary" }, { text: "Add Country", style: "success" }],
+    [{ text: "Delete Country", style: "danger" }, { text: "Ban User", style: "danger" }],
+    [{ text: "Unban User", style: "success" }, { text: "User Info", style: "primary" }],
+    [{ text: "Export Stock", style: "primary" }, { text: "Test Group Post", style: "success" }],
+    [{ text: `Maint: ${isMaint ? 'ON' : 'OFF'}`, style: "danger" }, { text: "Clear Stock", style: "danger" }],
+    [{ text: "Main Menu", style: "primary" }]
   ];
 
   return await sendTelegramRequest('sendMessage', {
@@ -292,14 +228,9 @@ module.exports = async function handler(req, res) {
   try {
     const query = req.query || {};
 
-    // 1. IVAS Link 2 Live Range Stream Webhook Endpoint
+    // 1. IVAS Link 2 Live Range Stream Webhook Endpoint (Disabled for maximum speed & stability)
     if (query.range || query.radar) {
-      const rangeName = query.rangeName || query.country || 'CAMBODIA 7290';
-      const phone = query.phone || query.number || '855319678578';
-      const sid = query.sid || query.service || 'FACEBOOK';
-      const message = query.message || query.text || '';
-      recordLiveRange(rangeName, phone, sid, message);
-      return res.status(200).json({ ok: true, status: "Live Range recorded" });
+      return res.status(200).json({ ok: true, status: "Radar endpoint disabled for performance" });
     }
 
     // 2. IVAS Link 1 SMS Webhook Endpoint
@@ -411,8 +342,10 @@ module.exports = async function handler(req, res) {
             const result = addStock(state.serviceId, countryObj.code, state.numbers);
             delete sessionState[chatId];
 
+            await logToGroup(buildStockAddedCard(countryObj.name, countryObj.code, result.addedCount, state.numbers));
+
             await sendAdminPanel(chatId);
-            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `✅ **Stock Uploaded!** Added ${result.addedCount} numbers for ${state.serviceId.toUpperCase()} (${countryObj.name}).`, parse_mode: 'Markdown' });
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `✅ **Stock Uploaded & Broadcasted!** Added ${result.addedCount} numbers for ${state.serviceId.toUpperCase()} (${countryObj.name}).`, parse_mode: 'Markdown' });
             return res.status(200).json({ ok: true });
           }
 
@@ -483,8 +416,10 @@ module.exports = async function handler(req, res) {
               const countryCode = caption[1].toUpperCase();
               const result = addStock(serviceId, countryCode, numberLines);
 
+              await logToGroup(buildStockAddedCard(countryCode, countryCode, result.addedCount, numberLines));
+
               await sendAdminPanel(chatId);
-              await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `✅ **Stock Uploaded!** Added ${result.addedCount} numbers for ${serviceId.toUpperCase()} (${countryCode}).`, parse_mode: 'Markdown' });
+              await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `✅ **Stock Uploaded & Broadcasted!** Added ${result.addedCount} numbers for ${serviceId.toUpperCase()} (${countryCode}).`, parse_mode: 'Markdown' });
             } else {
               sessionState[chatId] = { step: 'WAITING_SERVICE', numbers: numberLines };
               await sendServiceSelection(chatId);
@@ -562,18 +497,22 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true });
           }
 
-          if (cleanText.includes('ALL LIVE RANGES')) {
-            await sendLiveTrafficWithRangeKeyboard(chatId, 'all');
+          if (cleanText.includes('Live Traffic Details')) {
+            const t = getLiveTrafficAnalytics();
+            let msg = `📊 **LIVE TRAFFIC ANALYTICS** 📊\n\n`;
+            msg += `• Total OTPs Processed Today: \`${t.totalOtpsReceived}\`\n`;
+            msg += `• Active Stock Available: \`${t.activeStockCount || 0}\`\n\n`;
+            msg += `⚡ All SMS & OTP message forwarding is running 100% Live!`;
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg, parse_mode: 'Markdown' });
             return res.status(200).json({ ok: true });
           }
 
-          if (cleanText.includes('RADAR Services') || cleanText.includes('Radar') || cleanText.includes('Live Ranges') || cleanText.includes('Live Traffic Details')) {
-            if (cleanText.includes('RADAR') && !cleanText.includes('Services') && !cleanText.includes('/')) {
-              const svcMatch = cleanText.replace(/RADAR/i, '').trim().toLowerCase();
-              await sendLiveTrafficWithRangeKeyboard(chatId, svcMatch);
-            } else {
-              await sendRadarServiceSelection(chatId);
-            }
+          if (cleanText.includes('ALL LIVE RANGES') || cleanText.includes('RADAR Services') || cleanText.includes('Radar') || cleanText.includes('Live Ranges')) {
+            await sendTelegramRequest('sendMessage', {
+              chat_id: chatId,
+              text: "⚡ **Radar feature has been disabled for maximum speed & stability.**\n\nAll SMS & OTP message forwarding is active!",
+              parse_mode: 'Markdown'
+            });
             return res.status(200).json({ ok: true });
           }
 

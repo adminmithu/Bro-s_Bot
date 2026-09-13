@@ -17,7 +17,6 @@ IVAS_EMAIL = os.getenv("IVAS_EMAIL", "mithuchandra647@gmail.com")
 IVAS_PASSWORD = os.getenv("IVAS_PASSWORD", "Mithu@808")
 
 LINK_1_URL = "https://www.ivasms.com/portal/live/my_sms"
-LINK_2_URL = "https://www.ivasms.com/portal/sms/test/sms"
 LOGIN_URL = "https://www.ivasms.com/portal/login"
 
 FLAG_MAP = {
@@ -182,34 +181,11 @@ class IVASScraper:
         except Exception as e:
             print("Error polling Link 1:", e)
 
-    def poll_link_2(self):
-        """ Link 2 (/portal/sms/test/sms) -> Market Traffic Radar (No Group Spam!) """
-        try:
-            res = self.session.get(LINK_2_URL, timeout=15)
-            messages = self.parse_sms_table(res.text)
-            for item in messages:
-                msg_id = f"{item['phone']}_{item['message']}"
-                if msg_id not in self.processed_link2:
-                    self.processed_link2.add(msg_id)
-                    country_clean = re.sub(r'\s*\d+$', '', item['country']).strip()
-                    print(f"📡 [Link 2 Market Radar] Active Code Detected for {item['sid']} in {country_clean}")
-                    
-                    # Log market radar activity to bot database API if endpoint available
-                    try:
-                        bot_webhook_url = os.getenv("BOT_WEBHOOK_URL", "")
-                        if bot_webhook_url:
-                            requests.get(f"{bot_webhook_url}?radar=true&service={item['sid']}&country={country_clean}", timeout=5)
-                    except Exception:
-                        pass
-        except Exception as e:
-            print("Error scanning Link 2 Market Radar:", e)
-
     def start(self):
         self.login()
-        print("🚀 IVAS Scraper Started! Polling Link 1 (User + Group) & Link 2 (Group Only)...")
+        print("🚀 IVAS Scraper Started! Polling Link 1 (User + Group SMS)...")
         while True:
             self.poll_link_1()
-            self.poll_link_2()
             time.sleep(10)
 
 if __name__ == "__main__":

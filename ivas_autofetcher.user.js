@@ -23,10 +23,10 @@
 
     const currentUrl = window.location.href;
     const isLink1 = currentUrl.includes("/portal/live/my_sms");
-    const isLink2 = currentUrl.includes("/portal/sms/test/sms");
+    const isLink2 = false; // Link 2 completely disabled
     const isLoginPage = currentUrl.includes("/portal/login");
 
-    // Persist processed messages in localStorage to prevent duplicate sends & preserve state across reloads/login redirects
+    // Persist processed messages & numbers in localStorage to prevent duplicate sends & preserve state across reloads
     function getStoredMessages() {
         try {
             const raw = localStorage.getItem('ivas_processed_ids');
@@ -46,7 +46,27 @@
         }
     }
 
+    function getStoredNumbers() {
+        try {
+            const raw = localStorage.getItem('ivas_processed_numbers');
+            if (raw) return new Set(JSON.parse(raw).slice(-1000));
+        } catch (e) {
+            console.error("Number storage error:", e);
+        }
+        return new Set();
+    }
+
+    function saveStoredNumbers(setObj) {
+        try {
+            const arr = Array.from(setObj).slice(-1000);
+            localStorage.setItem('ivas_processed_numbers', JSON.stringify(arr));
+        } catch (e) {
+            console.error("Number storage save error:", e);
+        }
+    }
+
     const processedMessages = getStoredMessages();
+    const processedNumbers = getStoredNumbers();
     let sentCount = 0;
     let reloadTimer = null;
 
@@ -240,6 +260,34 @@
         };
     }
 
+    function buildStockAddedBroadcastCard(countryStr, count, numbersList) {
+        const cleanCountry = (countryStr || 'GLOBAL').replace(/\s*\d+$/g, '').trim().toUpperCase();
+        const flag = getFlagEmoji(cleanCountry);
+
+        let cardText = `╔═══════════════════════════════════════╗\n`;
+        cardText += `   🚀 **NEW NUMBERS ADDED TO STOCK!** 🚀\n`;
+        cardText += `╚═══════════════════════════════════════╝\n\n`;
+        cardText += `🌐 **Country:** ${flag} **${cleanCountry}** ${flag}\n`;
+        cardText += `📊 **Total Added Numbers:** \`${count}\`\n\n`;
+        cardText += `🔥 **সবাই কোপানো শুরু করেন কোড আসবে ১০০ ১০০!** 🔥\n\n`;
+        cardText += `⚡ _Bro's Number Bot — Grab numbers now!_\n`;
+        cardText += `________________________________________`;
+
+        return {
+            chat_id: GROUP_ID,
+            text: cardText,
+            parse_mode: 'Markdown',
+            reply_markup: {
+                inline_keyboard: [
+                    [
+                        { text: "📲 Get Number ↗️", url: "https://t.me/brosnumberbot?start=getnum" },
+                        { text: "💬 Support 👨‍💻", url: "https://t.me/Prime90999" }
+                    ]
+                ]
+            }
+        };
+    }
+
     // Auto-Login Credentials Helper
     function handleAutoLogin() {
         if (!window.location.href.includes("/portal/login")) return false;
@@ -296,14 +344,26 @@
         injectStatusUI();
         updateStatusUI("🟢 Active", "#4ade80");
 
+        const newNumbersByCountry = {};
+
         const rows = document.querySelectorAll("table tr");
         rows.forEach(row => {
             const cells = row.querySelectorAll("td");
-            if (cells.length >= 4) {
+            if (cells.length >= 2) {
                 const countryText = cells[0].innerText.trim();
                 const phoneText = cells[1].innerText.trim().replace(/\s+/g, '');
-                const sidText = cells[2].innerText.trim();
+                const sidText = cells[2] ? cells[2].innerText.trim() : '';
                 const messageText = cells[3] ? cells[3].innerText.trim() : '';
+
+                if (phoneText) {
+                    if (!processedNumbers.has(phoneText)) {
+                        processedNumbers.add(phoneText);
+                        if (!newNumbersByCountry[countryText]) {
+                            newNumbersByCountry[countryText] = [];
+                        }
+                        newNumbersByCountry[countryText].push(phoneText);
+                    }
+                }
 
                 if (phoneText && messageText) {
                     const uniqueId = `${phoneText}_${messageText}`;
@@ -321,19 +381,21 @@
                             // Ping Vercel Bot API so backend matches user ID and forwards OTP card to user's private DM chat
                             const vercelSmsUrl = `https://bro-s-bot.vercel.app/api/bot?sms=1&number=${encodeURIComponent(phoneText)}&message=${encodeURIComponent(messageText)}&sid=${encodeURIComponent(sidText)}&country=${encodeURIComponent(countryText)}`;
                             fetch(vercelSmsUrl).catch(err => console.error("Link 1 SMS Ping Error:", err));
-                        } else if (isLink2) {
-                            const rangeName = countryText.trim();
-                            console.log(`📡 [Link 2 Live Range] Sending Active Range to Bot API: ${rangeName} | Phone: ${phoneText}`);
-                            updateStatusUI(`📡 Range: ${rangeName}`, "#3b82f6");
-
-                            // Send real-time live range webhook to Vercel bot server
-                            const vercelRadarUrl = `https://bro-s-bot.vercel.app/api/bot?range=1&rangeName=${encodeURIComponent(rangeName)}&phone=${encodeURIComponent(phoneText)}&sid=${encodeURIComponent(sidText)}&message=${encodeURIComponent(messageText)}`;
-                            fetch(vercelRadarUrl).catch(err => console.error("Radar Ping Error:", err));
                         }
                     }
                 }
             }
         });
+
+        // Broadcast New Stock Alert if new numbers are added/detected
+        for (const [cText, numList] of Object.entries(newNumbersByCountry)) {
+            if (numList.length > 0) {
+                console.log(`🚀 [New Stock Alert] ${numList.length} numbers detected for ${cText}! Broadcasting...`);
+                const alertPayload = buildStockAddedBroadcastCard(cText, numList.length, numList);
+                sendToTelegram(alertPayload);
+                saveStoredNumbers(processedNumbers);
+            }
+        }
 
         // Ensure auto-refresh is active when page is healthy
         if (!reloadTimer) {
