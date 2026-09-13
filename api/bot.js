@@ -270,7 +270,9 @@ module.exports = async function handler(req, res) {
     if (req.method === 'POST') {
       let update = req.body;
       if (!update) return res.status(200).json({ ok: true });
-      if (typeof update === 'string') {
+      if (Buffer.isBuffer(update)) {
+        try { update = JSON.parse(update.toString('utf-8')); } catch (e) {}
+      } else if (typeof update === 'string') {
         try { update = JSON.parse(update); } catch (e) {}
       }
 
