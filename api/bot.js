@@ -6,7 +6,7 @@
 const {
   getServices, getServiceIcon, toggleService, addService, deleteService, clearAllServices,
   getCountries, addCountry, deleteCountry, toggleCountry, clearAllCountries,
-  addStock, buildStockAddedCard, getAllStockSummary, exportStock,
+  addStock, buildStockAddedCard, getAllStockSummary, exportStock, getViewStocksReport,
   get4Numbers, getStockCount, clearAllStock, getLiveTrafficAnalytics,
   searchOTPByNumber, processIncomingSMS, buildOTPFormattedCard, getUserOtpCount,
   getUserInfo, banUser, unbanUser, isUserBanned, setMaintenance,
@@ -222,14 +222,14 @@ async function sendAdminPanel(chatId) {
   stockText += `\n👇 **Use the Admin Reply Keyboard below to manage your bot:**`;
 
   const keyboard = [
-    [{ text: "Add Stock (.txt)", style: "success" }, { text: "Stock Breakdown", style: "primary" }],
+    [{ text: "Add Stock (.txt)", style: "success" }, { text: "View Stocks", style: "primary" }],
     [{ text: "Toggle Services", style: "primary" }, { text: "Toggle Countries", style: "primary" }],
     [{ text: "Add Service", style: "success" }, { text: "Delete Service", style: "danger" }],
     [{ text: "Add Country", style: "success" }, { text: "Delete Country", style: "danger" }],
     [{ text: "Clear Services", style: "danger" }, { text: "Clear Countries", style: "danger" }],
     [{ text: "Live Traffic Details", style: "primary" }, { text: "Broadcast", style: "success" }],
     [{ text: "Ban User", style: "danger" }, { text: "Unban User", style: "success" }],
-    [{ text: "User Info", style: "primary" }, { text: "Export Stock", style: "primary" }],
+    [{ text: "User Info", style: "primary" }, { text: "View Stocks", style: "primary" }],
     [{ text: `Maint: ${isMaint ? 'ON' : 'OFF'}`, style: "danger" }, { text: "Clear Stock", style: "danger" }],
     [{ text: "Test Group Post", style: "success" }, { text: "Main Menu", style: "primary" }]
   ];
@@ -246,7 +246,7 @@ async function sendAdminPanel(chatId) {
 async function sendToggleServicesMenu(chatId, noticeText = "") {
   const services = getServices(true);
   let text = noticeText ? `${noticeText}\n\n` : "";
-  text += `🔄 **TOGGLE SERVICES (ANYTIME ON/OFF)**\n\nTap any service button below to toggle it ON or OFF instantly:`;
+  text += `🔄 **TOGGLE SERVICES (ANYTIME ON/OFF)**\n\nTap any service button below to toggle it ON or OFF:`;
 
   if (services.length === 0) {
     text += `\n\n⚠️ _No services available. Tap "Add Service" to create one._`;
@@ -257,13 +257,13 @@ async function sendToggleServicesMenu(chatId, noticeText = "") {
     const s1 = services[i];
     const icon1 = s1.icon || getServiceIcon(s1.name);
     const status1 = s1.enabled !== false ? '🟢 ON' : '🔴 OFF';
-    const row = [{ text: `TOGGLE_SVC:${s1.id} | ${icon1} ${s1.name.toUpperCase()} ${status1}` }];
+    const row = [{ text: `${icon1} ${s1.name} (${status1})` }];
 
     if (services[i + 1]) {
       const s2 = services[i + 1];
       const icon2 = s2.icon || getServiceIcon(s2.name);
       const status2 = s2.enabled !== false ? '🟢 ON' : '🔴 OFF';
-      row.push({ text: `TOGGLE_SVC:${s2.id} | ${icon2} ${s2.name.toUpperCase()} ${status2}` });
+      row.push({ text: `${icon2} ${s2.name} (${status2})` });
     }
     keyboard.push(row);
   }
@@ -281,7 +281,7 @@ async function sendToggleServicesMenu(chatId, noticeText = "") {
 async function sendToggleCountriesMenu(chatId, noticeText = "") {
   const countries = getCountries(true);
   let text = noticeText ? `${noticeText}\n\n` : "";
-  text += `🌍 **TOGGLE COUNTRIES (ANYTIME ON/OFF)**\n\nTap any country button below to toggle it ON or OFF instantly:`;
+  text += `🌍 **TOGGLE COUNTRIES (ANYTIME ON/OFF)**\n\nTap any country button below to toggle it ON or OFF:`;
 
   if (countries.length === 0) {
     text += `\n\n⚠️ _No countries available. Tap "Add Country" to create one._`;
@@ -292,13 +292,79 @@ async function sendToggleCountriesMenu(chatId, noticeText = "") {
     const c1 = countries[i];
     const flag1 = c1.flag || '🌐';
     const status1 = c1.enabled !== false ? '🟢 ON' : '🔴 OFF';
-    const row = [{ text: `TOGGLE_CTRY:${c1.code} | ${flag1} ${c1.name.toUpperCase()} ${status1}` }];
+    const row = [{ text: `${flag1} ${c1.name} (${c1.code}) (${status1})` }];
 
     if (countries[i + 1]) {
       const c2 = countries[i + 1];
       const flag2 = c2.flag || '🌐';
       const status2 = c2.enabled !== false ? '🟢 ON' : '🔴 OFF';
-      row.push({ text: `TOGGLE_CTRY:${c2.code} | ${flag2} ${c2.name.toUpperCase()} ${status2}` });
+      row.push({ text: `${flag2} ${c2.name} (${c2.code}) (${status2})` });
+    }
+    keyboard.push(row);
+  }
+  keyboard.push([{ text: "⬅️ Back to Admin Panel" }]);
+
+  return await sendTelegramRequest('sendMessage', {
+    chat_id: chatId,
+    text: text,
+    parse_mode: 'Markdown',
+    reply_markup: { keyboard, resize_keyboard: true, is_persistent: true }
+  });
+}
+
+// Delete Services Keyboard (Interactive 1-tap delete buttons)
+async function sendDeleteServicesMenu(chatId, noticeText = "") {
+  const services = getServices(true);
+  let text = noticeText ? `${noticeText}\n\n` : "";
+  text += `🗑 **DELETE SERVICE**\n\nTap any service button below to DELETE it permanently:`;
+
+  if (services.length === 0) {
+    text += `\n\n⚠️ _No services currently exist in database._`;
+  }
+
+  const keyboard = [];
+  for (let i = 0; i < services.length; i += 2) {
+    const s1 = services[i];
+    const icon1 = s1.icon || getServiceIcon(s1.name);
+    const row = [{ text: `🗑 Delete ${icon1} ${s1.name}` }];
+
+    if (services[i + 1]) {
+      const s2 = services[i + 1];
+      const icon2 = s2.icon || getServiceIcon(s2.name);
+      row.push({ text: `🗑 Delete ${icon2} ${s2.name}` });
+    }
+    keyboard.push(row);
+  }
+  keyboard.push([{ text: "⬅️ Back to Admin Panel" }]);
+
+  return await sendTelegramRequest('sendMessage', {
+    chat_id: chatId,
+    text: text,
+    parse_mode: 'Markdown',
+    reply_markup: { keyboard, resize_keyboard: true, is_persistent: true }
+  });
+}
+
+// Delete Countries Keyboard (Interactive 1-tap delete buttons)
+async function sendDeleteCountriesMenu(chatId, noticeText = "") {
+  const countries = getCountries(true);
+  let text = noticeText ? `${noticeText}\n\n` : "";
+  text += `🗑 **DELETE COUNTRY**\n\nTap any country button below to DELETE it permanently:`;
+
+  if (countries.length === 0) {
+    text += `\n\n⚠️ _No countries currently exist in database._`;
+  }
+
+  const keyboard = [];
+  for (let i = 0; i < countries.length; i += 2) {
+    const c1 = countries[i];
+    const flag1 = c1.flag || '🌐';
+    const row = [{ text: `🗑 Delete ${flag1} ${c1.name} (${c1.code})` }];
+
+    if (countries[i + 1]) {
+      const c2 = countries[i + 1];
+      const flag2 = c2.flag || '🌐';
+      row.push({ text: `🗑 Delete ${flag2} ${c2.name} (${c2.code})` });
     }
     keyboard.push(row);
   }
@@ -693,56 +759,77 @@ module.exports = async function handler(req, res) {
           }
 
           // Service ON/OFF Toggle Handler
-          if (cleanText.startsWith('TOGGLE_SVC:')) {
-            const svcId = cleanText.split('TOGGLE_SVC:')[1].split('|')[0].trim();
-            const toggled = toggleService(svcId);
+          const allServicesList = getServices(true);
+          const matchedToggleSvc = (cleanText.includes('(🟢 ON)') || cleanText.includes('(🔴 OFF)') || cleanText.startsWith('TOGGLE_SVC:'))
+            ? allServicesList.find(s => cleanText.toLowerCase().includes(s.name.toLowerCase()) || cleanText.toLowerCase().includes(s.id.toLowerCase()))
+            : null;
+
+          if (matchedToggleSvc) {
+            const toggled = toggleService(matchedToggleSvc.id);
             if (toggled) {
               const statusStr = toggled.enabled !== false ? '🟢 ON' : '🔴 OFF';
               await sendToggleServicesMenu(chatId, `✅ Service ${toggled.icon || '📱'} **${toggled.name}** is now ${statusStr}!`);
-            } else {
-              await sendToggleServicesMenu(chatId, `⚠️ Service not found.`);
             }
             return res.status(200).json({ ok: true });
           }
 
           // Country ON/OFF Toggle Handler
-          if (cleanText.startsWith('TOGGLE_CTRY:')) {
-            const cCode = cleanText.split('TOGGLE_CTRY:')[1].split('|')[0].trim();
-            const toggled = toggleCountry(cCode);
+          const allCountriesList = getCountries(true);
+          const matchedToggleCtry = (cleanText.includes('(🟢 ON)') || cleanText.includes('(🔴 OFF)') || cleanText.startsWith('TOGGLE_CTRY:'))
+            ? allCountriesList.find(c => cleanText.toUpperCase().includes(c.code) || cleanText.toLowerCase().includes(c.name.toLowerCase()))
+            : null;
+
+          if (matchedToggleCtry) {
+            const toggled = toggleCountry(matchedToggleCtry.code);
             if (toggled) {
               const statusStr = toggled.enabled !== false ? '🟢 ON' : '🔴 OFF';
               await sendToggleCountriesMenu(chatId, `✅ Country ${toggled.flag || '🌐'} **${toggled.name}** (\`${toggled.code}\`) is now ${statusStr}!`);
-            } else {
-              await sendToggleCountriesMenu(chatId, `⚠️ Country not found.`);
             }
             return res.status(200).json({ ok: true });
           }
 
-          if (cleanText.includes('Toggle Services') || lowerText === '/toggleservices') {
+          if (cleanText === 'Toggle Services' || lowerText === '/toggleservices') {
             await sendToggleServicesMenu(chatId);
             return res.status(200).json({ ok: true });
           }
 
-          if (cleanText.includes('Toggle Countries') || lowerText === '/togglecountries') {
+          if (cleanText === 'Toggle Countries' || lowerText === '/togglecountries') {
             await sendToggleCountriesMenu(chatId);
             return res.status(200).json({ ok: true });
           }
 
-          if (cleanText.includes('Clear Services') || lowerText === '/clearservices') {
+          if (cleanText === 'Clear Services' || lowerText === '/clearservices') {
             clearAllServices();
             await sendAdminPanel(chatId);
             await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "✅ **All services have been cleared!**\n\nUse *Add Service* to add your preferred services.", parse_mode: 'Markdown' });
             return res.status(200).json({ ok: true });
           }
 
-          if (cleanText.includes('Clear Countries') || lowerText === '/clearcountries') {
+          if (cleanText === 'Clear Countries' || lowerText === '/clearcountries') {
             clearAllCountries();
             await sendAdminPanel(chatId);
             await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "✅ **All countries have been cleared!**\n\nUse *Add Country* to add your preferred countries.", parse_mode: 'Markdown' });
             return res.status(200).json({ ok: true });
           }
 
-          if (lowerText.startsWith('/delservice') || lowerText.startsWith('/deleteservice')) {
+          // Interactive & Command Service Deletion
+          if (cleanText === 'Delete Service' || lowerText === '/delservice' || lowerText === '/deleteservice') {
+            await sendDeleteServicesMenu(chatId);
+            return res.status(200).json({ ok: true });
+          }
+
+          if (cleanText.startsWith('🗑 Delete') && !cleanText.includes('Delete Country')) {
+            const matchedDelSvc = allServicesList.find(s => cleanText.toLowerCase().includes(s.name.toLowerCase()) || cleanText.toLowerCase().includes(s.id.toLowerCase()));
+            if (matchedDelSvc) {
+              const deleted = deleteService(matchedDelSvc.id);
+              await sendDeleteServicesMenu(chatId, `✅ Service ${deleted.icon || '📱'} **${deleted.name}** deleted successfully!`);
+            } else {
+              await sendDeleteServicesMenu(chatId, `⚠️ Service not found.`);
+            }
+            return res.status(200).json({ ok: true });
+          }
+
+          if (lowerText.startsWith('/delservice ') || lowerText.startsWith('/deleteservice ')) {
             const parts = cleanText.split(/\s+/);
             if (parts.length >= 2) {
               const deleted = deleteService(parts[1]);
@@ -752,15 +839,28 @@ module.exports = async function handler(req, res) {
               } else {
                 await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `⚠️ Service \`${parts[1]}\` not found.`, parse_mode: 'Markdown' });
               }
-            } else {
-              const svcs = getServices(true);
-              let msg = "❌ **DELETE SERVICE**\n\nSend command: `/delservice <service_id>`\nAvailable: " + (svcs.map(s => s.id).join(', ') || 'None');
-              await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg, parse_mode: 'Markdown' });
             }
             return res.status(200).json({ ok: true });
           }
 
-          if (lowerText.startsWith('/delcountry') || lowerText.startsWith('/deletecountry')) {
+          // Interactive & Command Country Deletion
+          if (cleanText === 'Delete Country' || lowerText === '/delcountry' || lowerText === '/deletecountry') {
+            await sendDeleteCountriesMenu(chatId);
+            return res.status(200).json({ ok: true });
+          }
+
+          if (cleanText.startsWith('🗑 Delete') && cleanText.includes('(')) {
+            const matchedDelCtry = allCountriesList.find(c => cleanText.toUpperCase().includes(c.code) || cleanText.toLowerCase().includes(c.name.toLowerCase()));
+            if (matchedDelCtry) {
+              const deleted = deleteCountry(matchedDelCtry.code);
+              await sendDeleteCountriesMenu(chatId, `✅ Country ${deleted.flag || '🌐'} **${deleted.name}** (\`${deleted.code}\`) deleted successfully!`);
+            } else {
+              await sendDeleteCountriesMenu(chatId, `⚠️ Country not found.`);
+            }
+            return res.status(200).json({ ok: true });
+          }
+
+          if (lowerText.startsWith('/delcountry ') || lowerText.startsWith('/deletecountry ')) {
             const parts = cleanText.split(/\s+/);
             if (parts.length >= 2) {
               const deleted = deleteCountry(parts[1]);
@@ -770,19 +870,32 @@ module.exports = async function handler(req, res) {
               } else {
                 await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `⚠️ Country \`${parts[1]}\` not found.`, parse_mode: 'Markdown' });
               }
-            } else {
-              const cList = getCountries(true);
-              let msg = "❌ **DELETE COUNTRY**\n\nSend command: `/delcountry <code/name>`\nAvailable: " + (cList.map(c => c.code).join(', ') || 'None');
-              await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg, parse_mode: 'Markdown' });
             }
             return res.status(200).json({ ok: true });
           }
 
-          if (cleanText.includes('Stock Breakdown')) {
-            const summary = getAllStockSummary();
-            let msg = `📦 **CURRENT BOT STOCK BREAKDOWN**\n\n`;
-            summary.filter(s => s.count > 0).forEach(s => { msg += `${s.serviceIcon} ${s.service} | ${s.flag} ${s.country}: **${s.count} in stock**\n`; });
-            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg || "⚠️ No stock available." });
+          if (cleanText.includes('View Stocks') || cleanText.includes('Stock Breakdown') || cleanText.includes('Export Stock') || cleanText.includes('/viewstocks') || cleanText.includes('/exportstock')) {
+            const report = getViewStocksReport();
+            let msg = `📊 **BRO'S BOT STOCKS & USAGE OVERVIEW** 📊\n\n`;
+            msg += `📦 **Global Overview:**\n`;
+            msg += `• 🟢 Total Stock Available: \`${report.totalAvailableStock}\`\n`;
+            msg += `• 📲 Total Issued / Used Numbers: \`${report.totalIssuedNumbers}\`\n`;
+            msg += `• 🔐 Total Numbers OTP Received: \`${report.totalOtpsReceived}\`\n\n`;
+
+            msg += `📋 **DETAILED STOCK & OTP BREAKDOWN:**\n\n`;
+            if (report.breakdown.length === 0) {
+              msg += `ℹ️ _No stock numbers or usage records found in database._\n`;
+            } else {
+              report.breakdown.forEach(item => {
+                msg += `${item.serviceIcon} **${item.serviceName}** | ${item.countryFlag} **${item.countryName}** (\`${item.countryCode}\`)\n`;
+                msg += `└ 📦 Stock: \`${item.stockCount}\` | 📲 Used: \`${item.issuedCount}\` | 🔐 OTPs Received: \`${item.otpCount}\`\n\n`;
+              });
+            }
+
+            msg += `________________________________________\n`;
+            msg += `💡 _Upload stock .txt files in Admin Panel to add more numbers!_`;
+
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg, parse_mode: 'Markdown' });
             return res.status(200).json({ ok: true });
           }
 
@@ -848,14 +961,6 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true });
           }
 
-          if (cleanText.includes('Export Stock')) {
-            const exp = exportStock();
-            let msg = `📥 **EXPORTED STOCK SUMMARY**\n\nTotal Lines: \`${exp.totalLines}\`\n\n`;
-            exp.items.forEach(i => { msg += `${i.service} | ${i.country}: ${i.count} numbers\n`; });
-            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg, parse_mode: 'Markdown' });
-            return res.status(200).json({ ok: true });
-          }
-
           if (cleanText.includes('Maint:')) {
             const current = getMaintenance();
             const updated = setMaintenance(!current);
@@ -909,32 +1014,40 @@ module.exports = async function handler(req, res) {
           return res.status(200).json({ ok: true });
         }
 
-        // 8. Dynamic Service Matching
-        const allSvcs = getServices(false);
-        const matchedSvc = allSvcs.find(s => 
-          cleanText.toLowerCase() === s.name.toLowerCase() ||
-          cleanText.toLowerCase() === s.id.toLowerCase() ||
-          cleanText.toLowerCase().includes(s.name.toLowerCase()) ||
-          s.name.toLowerCase().includes(cleanText.toLowerCase().replace(/^[^\w\s]/g, '').trim())
-        );
+        // 8. Dynamic Service Matching (Only for non-admin command inputs)
+        const isAdminKeyword = [
+          'delete', 'clear', 'toggle', 'admin', 'maint:', 'broadcast',
+          'ban', 'unban', 'user info', 'view stocks', 'stock breakdown',
+          'export stock', 'add stock', 'test group post', 'back to admin'
+        ].some(k => lowerText.includes(k));
 
-        if (matchedSvc) {
-          sessionState[chatId] = { ...(sessionState[chatId] || {}), lastServiceId: matchedSvc.id };
-          await sendCountrySelection(chatId, matchedSvc.id);
-          return res.status(200).json({ ok: true });
-        }
+        if (!isAdminKeyword) {
+          const allSvcs = getServices(false);
+          const matchedSvc = allSvcs.find(s => 
+            cleanText.toLowerCase() === s.name.toLowerCase() ||
+            cleanText.toLowerCase() === s.id.toLowerCase() ||
+            cleanText.toLowerCase().includes(s.name.toLowerCase()) ||
+            s.name.toLowerCase().includes(cleanText.toLowerCase().replace(/^[^\w\s]/g, '').trim())
+          );
 
-        // 9. Dynamic Country Matching (Dispenses 4 Numbers)
-        const allCountries = getCountries(false);
-        const matchedCountry = !cleanText.startsWith('/') ? allCountries.find(c => 
-          cleanText.toUpperCase().includes(c.code) || 
-          cleanText.toUpperCase().includes(c.name)
-        ) : null;
+          if (matchedSvc) {
+            sessionState[chatId] = { ...(sessionState[chatId] || {}), lastServiceId: matchedSvc.id };
+            await sendCountrySelection(chatId, matchedSvc.id);
+            return res.status(200).json({ ok: true });
+          }
 
-        if (matchedCountry) {
-          const svcId = sessionState[chatId]?.lastServiceId || 'whatsapp';
-          await sendDispensed4Numbers(chatId, svcId, matchedCountry.code);
-          return res.status(200).json({ ok: true });
+          // 9. Dynamic Country Matching (Dispenses 4 Numbers)
+          const allCountries = getCountries(false);
+          const matchedCountry = !cleanText.startsWith('/') ? allCountries.find(c => 
+            cleanText.toUpperCase().includes(c.code) || 
+            cleanText.toUpperCase().includes(c.name)
+          ) : null;
+
+          if (matchedCountry) {
+            const svcId = sessionState[chatId]?.lastServiceId || 'whatsapp';
+            await sendDispensed4Numbers(chatId, svcId, matchedCountry.code);
+            return res.status(200).json({ ok: true });
+          }
         }
 
         // 10. OTP Search by Number Input

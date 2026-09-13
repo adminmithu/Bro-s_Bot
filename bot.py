@@ -340,6 +340,49 @@ def get_live_traffic_analytics():
     items = sorted(analytics.values(), key=lambda x: x['otpCount'], reverse=True)
     return {'total_otps': total_otps, 'items': items}
 
+def get_view_stocks_report():
+    total_stock = 0
+    total_issued = len(db_issued_numbers)
+    total_otps = sum(1 for rec in db_issued_numbers.values() if rec.get('otpCode') or rec.get('fullMessage'))
+
+    breakdown_lines = []
+    for s in db_services:
+        for c in db_countries:
+            key = f"{s['id']}:{c['code']}"
+            stock_cnt = len(db_stock.get(key, []))
+            total_stock += stock_cnt
+
+            issued_cnt = 0
+            otp_cnt = 0
+            for num, rec in db_issued_numbers.items():
+                if rec.get('serviceId', '').lower() == s['id'].lower() and rec.get('countryCode', '').upper() == c['code'].upper():
+                    issued_cnt += 1
+                    if rec.get('otpCode') or rec.get('fullMessage'):
+                        otp_cnt += 1
+
+            if stock_cnt > 0 or issued_cnt > 0 or otp_cnt > 0:
+                flag = c.get('flag', get_flag_emoji(c['code']))
+                breakdown_lines.append(
+                    f"{s['icon']} **{s['name']}** | {flag} **{c['name']}** (`{c['code']}`)\n"
+                    f"└ 📦 Stock: `{stock_cnt}` | 📲 Used: `{issued_cnt}` | 🔐 OTPs Received: `{otp_cnt}`"
+                )
+
+    msg = f"📊 **BRO'S BOT STOCKS & USAGE OVERVIEW** 📊\n\n"
+    msg += f"📦 **Global Overview:**\n"
+    msg += f"• 🟢 Total Stock Available: `{total_stock}`\n"
+    msg += f"• 📲 Total Issued / Used Numbers: `{total_issued}`\n"
+    msg += f"• 🔐 Total Numbers OTP Received: `{total_otps}`\n\n"
+    msg += f"📋 **DETAILED STOCK & OTP BREAKDOWN:**\n\n"
+
+    if not breakdown_lines:
+        msg += f"ℹ️ _No stock numbers or usage records found in database._\n"
+    else:
+        msg += "\n\n".join(breakdown_lines) + "\n"
+
+    msg += f"\n________________________________________\n"
+    msg += f"💡 _Upload stock .txt files in Admin Panel to add more numbers!_"
+    return msg
+
 def send_admin_panel(chat_id, message_id=None):
     traffic_data = get_live_traffic_analytics()
     summary_text = "⚙️ **BRO'S BOT ADMIN CONTROL PANEL** ⚙️\n\n"
@@ -371,7 +414,7 @@ def send_admin_panel(chat_id, message_id=None):
         "keyboard": [
             [
                 {"text": "📥 Add Stock (.txt)", "style": "success"},
-                {"text": "📦 Stock Breakdown", "style": "primary"}
+                {"text": "📊 View Stocks", "style": "primary"}
             ],
             [
                 {"text": "📈 Live Traffic Details", "style": "primary"},
@@ -391,7 +434,7 @@ def send_admin_panel(chat_id, message_id=None):
             ],
             [
                 {"text": "👤 User Info", "style": "primary"},
-                {"text": "📥 Export Stock", "style": "primary"}
+                {"text": "📊 View Stocks", "style": "primary"}
             ],
             [
                 {"text": "📲 Live SMS Tester", "style": "primary"},
@@ -439,6 +482,28 @@ def send_service_toggle_menu(chat_id, message_id=None):
         'parse_mode': 'Markdown',
         'reply_markup': {"inline_keyboard": inline_keyboard}
     })
+
+def send_delete_service_menu(chat_id, message_id=None):
+    if not db_services:
+        text = "❌ **DELETE SERVICE**\n\nNo services currently exist in the database."
+        inline_keyboard = [[{"text": "🔙 Back to Admin", "callback_data": "admin_stock"}, {"text": "🏠 Main Menu", "callback_data": "back_to_main_menu"}]]
+        if message_id:
+            return send_telegram_request('editMessageText', {'chat_id': chat_id, 'message_id': message_id, 'text': text, 'parse_mode': 'Markdown', 'reply_markup': {"inline_keyboard": inline_keyboard}})
+        return send_telegram_request('sendMessage', {'chat_id': chat_id, 'text': text, 'parse_mode': 'Markdown', 'reply_markup': {"inline_keyboard": inline_keyboard}})
+
+    text = "❌ **DELETE SERVICE**\n\nClick any service button below to remove it from the system:\n"
+    inline_keyboard = [
+        [{"text": f"❌ {s['icon']} {s['name']}", "callback_data": f"admin_confirm_delsvc_{s['id']}"}]
+        for s in db_services
+    ]
+    inline_keyboard.append([
+        {"text": "🔙 Back to Admin", "callback_data": "admin_stock"},
+        {"text": "🏠 Main Menu", "callback_data": "back_to_main_menu"}
+    ])
+
+    if message_id:
+        return send_telegram_request('editMessageText', {'chat_id': chat_id, 'message_id': message_id, 'text': text, 'parse_mode': 'Markdown', 'reply_markup': {"inline_keyboard": inline_keyboard}})
+    return send_telegram_request('sendMessage', {'chat_id': chat_id, 'text': text, 'parse_mode': 'Markdown', 'reply_markup': {"inline_keyboard": inline_keyboard}})
 
 def send_delete_country_menu(chat_id, message_id=None):
     if not db_countries:
@@ -582,113 +647,8 @@ def handle_update(update):
                     [{"text": "🔙 Back to Admin", "callback_data": "admin_stock"}, {"text": "🏠 Main Menu", "callback_data": "back_to_main_menu"}]
                 ]}
             })
-        elif data == "admin_stock_details":
-            text = "📦 **FULL NUMBER STOCK BREAKDOWN** 📦\n\n"
-            stock_lines = []
-            for s in db_services:
-                for c in db_countries:
-                    key = f"{s['id']}:{c['code']}"
-                    cnt = len(db_stock.get(key, []))
-                    status_badge = f"🟢 `{cnt}` in stock" if cnt > 0 else "🔴 **OUT OF STOCK**"
-                    stock_lines.append(f"{s['icon']} **{s['name']}** | {c['flag']} **{c['name']}** (`{c['code']}`)\n└ Status: {status_badge}")
-            if not stock_lines:
-                text += "⚠️ _No stock numbers or countries added yet._\n"
-            else:
-                text += "\n\n".join(stock_lines)
-            send_telegram_request('editMessageText', {
-                'chat_id': chat_id,
-                'message_id': message_id,
-                'text': text,
-                'parse_mode': 'Markdown',
-                'reply_markup': {"inline_keyboard": [
-                    [{"text": "🔙 Back to Admin", "callback_data": "admin_stock"}, {"text": "🏠 Main Menu", "callback_data": "back_to_main_menu"}]
-                ]}
-            })
-        elif data == "admin_broadcast":
-            text = "📢 **BROADCAST ANNOUNCEMENT**\n\nTo send a broadcast message to all bot users, send text in format:\n`/broadcast Your announcement message here`\n\n*Example:*\n`/broadcast 🔥 New Facebook US numbers added to stock!`"
-            send_telegram_request('editMessageText', {
-                'chat_id': chat_id,
-                'message_id': message_id,
-                'text': text,
-                'parse_mode': 'Markdown',
-                'reply_markup': {"inline_keyboard": [
-                    [{"text": "🔙 Back to Admin", "callback_data": "admin_stock"}, {"text": "🏠 Main Menu", "callback_data": "back_to_main_menu"}]
-                ]}
-            })
-        elif data == "admin_addsvc":
-            text = "➕ **ADD NEW SERVICE**\n\nTo add a new service, send text command:\n`/addservice <id> <name> <icon>`\n\n*Example:*\n`/addservice telegram Telegram ✈️`"
-            send_telegram_request('editMessageText', {
-                'chat_id': chat_id,
-                'message_id': message_id,
-                'text': text,
-                'parse_mode': 'Markdown',
-                'reply_markup': {"inline_keyboard": [
-                    [{"text": "🔙 Back to Admin", "callback_data": "admin_stock"}, {"text": "🏠 Main Menu", "callback_data": "back_to_main_menu"}]
-                ]}
-            })
-        elif data == "admin_togglesvc_menu":
-            send_service_toggle_menu(chat_id, message_id)
-        elif data.startswith("admin_togglesvc_"):
-            svc_id = data.replace("admin_togglesvc_", "")
-            svc = next((s for s in db_services if s['id'] == svc_id), None)
-            if svc:
-                svc['enabled'] = not svc.get('enabled', True)
-            send_service_toggle_menu(chat_id, message_id)
-        elif data == "admin_toggle_maint":
-            db_maintenance = not db_maintenance
-            send_admin_panel(chat_id, message_id)
-        elif data == "admin_addcountry":
-            text = "➕ **ADD NEW COUNTRY**\n\nTo add a country, send text command:\n`/addcountry <Country Name>`\n\n*Example:*\n`/addcountry United States` or `/addcountry BD`"
-            send_telegram_request('editMessageText', {
-                'chat_id': chat_id,
-                'message_id': message_id,
-                'text': text,
-                'parse_mode': 'Markdown',
-                'reply_markup': {"inline_keyboard": [
-                    [{"text": "🔙 Back to Admin", "callback_data": "admin_stock"}, {"text": "🏠 Main Menu", "callback_data": "back_to_main_menu"}]
-                ]}
-            })
-        elif data == "admin_delcountry_menu":
-            send_delete_country_menu(chat_id, message_id)
-        elif data.startswith("admin_confirm_delcountry_"):
-            code = data.replace("admin_confirm_delcountry_", "")
-            db_countries = [c for c in db_countries if c['code'] != code]
-            send_delete_country_menu(chat_id, message_id)
-        elif data == "admin_banuser":
-            text = "🚫 **BAN USER**\n\nTo ban a user from using the bot, send text command:\n`/banuser <user_id>`\n\n*Example:*\n`/banuser 123456789`"
-            send_telegram_request('editMessageText', {
-                'chat_id': chat_id,
-                'message_id': message_id,
-                'text': text,
-                'parse_mode': 'Markdown',
-                'reply_markup': {"inline_keyboard": [
-                    [{"text": "🔙 Back to Admin", "callback_data": "admin_stock"}, {"text": "🏠 Main Menu", "callback_data": "back_to_main_menu"}]
-                ]}
-            })
-        elif data == "admin_unbanuser":
-            text = "✅ **UNBAN USER**\n\nTo unban a user, send text command:\n`/unbanuser <user_id>`\n\n*Example:*\n`/unbanuser 123456789`"
-            send_telegram_request('editMessageText', {
-                'chat_id': chat_id,
-                'message_id': message_id,
-                'text': text,
-                'parse_mode': 'Markdown',
-                'reply_markup': {"inline_keyboard": [
-                    [{"text": "🔙 Back to Admin", "callback_data": "admin_stock"}, {"text": "🏠 Main Menu", "callback_data": "back_to_main_menu"}]
-                ]}
-            })
-        elif data == "admin_userinfo":
-            text = "👤 **USER SEARCH & DETAILS**\n\nTo view details and order history for a user, send text command:\n`/userinfo <user_id>`\n\n*Example:*\n`/userinfo 8929349073`"
-            send_telegram_request('editMessageText', {
-                'chat_id': chat_id,
-                'message_id': message_id,
-                'text': text,
-                'parse_mode': 'Markdown',
-                'reply_markup': {"inline_keyboard": [
-                    [{"text": "🔙 Back to Admin", "callback_data": "admin_stock"}, {"text": "🏠 Main Menu", "callback_data": "back_to_main_menu"}]
-                ]}
-            })
-        elif data == "admin_exportstock":
-            text = "📥 **EXPORT STOCK**\n\nTo view stock numbers for a service and country, send text command:\n`/exportstock <service> <country_code>`\n\n*Example:*\n`/exportstock facebook US`"
+        elif data in ["admin_stock_details", "admin_exportstock"]:
+            text = get_view_stocks_report()
             send_telegram_request('editMessageText', {
                 'chat_id': chat_id,
                 'message_id': message_id,
@@ -710,6 +670,18 @@ def handle_update(update):
                     [{"text": "🔙 Back to Admin", "callback_data": "admin_stock"}, {"text": "🏠 Main Menu", "callback_data": "back_to_main_menu"}]
                 ]}
             })
+        elif data.startswith("admin_confirm_delsvc_"):
+            svc_id = data.replace("admin_confirm_delsvc_", "")
+            db_services = [s for s in db_services if s['id'] != svc_id]
+            send_delete_service_menu(chat_id, message_id)
+        elif data.startswith("admin_confirm_delcountry_"):
+            code = data.replace("admin_confirm_delcountry_", "")
+            db_countries = [c for c in db_countries if c['code'] != code]
+            send_delete_country_menu(chat_id, message_id)
+        elif data == "admin_delsvc_menu":
+            send_delete_service_menu(chat_id, message_id)
+        elif data == "admin_delcountry_menu":
+            send_delete_country_menu(chat_id, message_id)
         elif data == "admin_confirm_clearstock":
             db_stock = {}
             text = "✅ **All Stock Cleared Successfully!**"
@@ -890,22 +862,52 @@ def handle_update(update):
                 send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': f"✅ User `{uid}` has been **unbanned**!", 'parse_mode': 'Markdown'})
             return
 
-        if (text.startswith("/delcountry") or text.startswith("/deletecountry")) and is_admin:
-            code = text.replace("/delcountry", "").replace("/deletecountry", "").strip().upper()
-            if code:
-                db_countries = [c for c in db_countries if c['code'] != code]
-                send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': f"✅ Country `{code}` removed!", 'parse_mode': 'Markdown'})
+        if is_admin:
+            if "delete service" in lower_text or lower_text.startswith("/delservice") or lower_text.startswith("/deleteservice"):
+                parts = text.split(' ')
+                if len(parts) >= 2 and parts[1].strip():
+                    svc_id = parts[1].strip().lower()
+                    db_services = [s for s in db_services if s['id'] != svc_id and s['name'].lower() != svc_id]
+                    send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': f"✅ Service `{svc_id}` removed!", 'parse_mode': 'Markdown'})
+                else:
+                    send_delete_service_menu(chat_id)
+                return
+
+            if "delete country" in lower_text or lower_text.startswith("/delcountry") or lower_text.startswith("/deletecountry"):
+                parts = text.split(' ')
+                if len(parts) >= 2 and parts[1].strip():
+                    code = parts[1].strip().upper()
+                    db_countries = [c for c in db_countries if c['code'] != code and c['name'].upper() != code]
+                    send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': f"✅ Country `{code}` removed!", 'parse_mode': 'Markdown'})
+                else:
+                    send_delete_country_menu(chat_id)
+                return
+
+            if "toggle service" in lower_text or lower_text == "/toggleservices":
+                send_service_toggle_menu(chat_id)
+                return
+
+            if "toggle countr" in lower_text or lower_text == "/togglecountries":
+                send_delete_country_menu(chat_id)
+                return
+
+            if "clear service" in lower_text or lower_text == "/clearservices":
+                db_services = []
+                send_admin_panel(chat_id)
+                send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': "✅ **All services have been cleared!**", 'parse_mode': 'Markdown'})
+                return
+
+            if "clear countr" in lower_text or lower_text == "/clearcountries":
+                db_countries = []
+                send_admin_panel(chat_id)
+                send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': "✅ **All countries have been cleared!**", 'parse_mode': 'Markdown'})
+                return
+
+        if (text.startswith("/viewstocks") or text.startswith("/exportstock") or "view stocks" in lower_text or "stock breakdown" in lower_text or "export stock" in lower_text) and is_admin:
+            msg = get_view_stocks_report()
+            send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': msg, 'parse_mode': 'Markdown'})
             return
 
-        if text.startswith("/userinfo") and is_admin:
-            uid = text.replace("/userinfo", "").strip()
-            if uid:
-                is_b = str(uid) in db_banned_users
-                msg = f"👤 **USER INFO & HISTORY**\n\n🆔 User ID: `{uid}`\n🚫 Status: {'BANNED 🔴' if is_b else 'ACTIVE 🟢'}\n"
-                send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': msg, 'parse_mode': 'Markdown'})
-            return
-
-        lower_text = text.lower()
         if lower_text == "/admin" or "admin panel" in lower_text:
             if is_admin: send_admin_panel(chat_id)
         elif lower_text == "/start" or "main menu" in lower_text:

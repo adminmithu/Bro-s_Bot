@@ -1,12 +1,16 @@
 // ==UserScript==
 // @name         IVAS SMS Auto-Fetcher & Telegram OTP Broadcaster
 // @namespace    http://tampermonkey.net/
-// @version      3.2
-// @description  Automatically fetches live SMS from IVAS Portal links with Cloudflare resilience, auto-login helper & persistent Telegram OTP broadcasting.
+// @version      3.5
+// @description  Automates IVAS Portal login, Cloudflare resilience, no-refresh live SMS fetching & persistent Telegram OTP broadcasting.
 // @author       Prime ADMIN
 // @match        https://www.ivasms.com/portal/*
+// @match        https://ivasms.com/portal/*
+// @match        https://www.ivasms.com/*
+// @match        https://ivasms.com/*
 // @grant        GM_xmlhttpRequest
 // @connect      api.telegram.org
+// @connect      bro-s-bot.vercel.app
 // @connect      *
 // ==UserScript==
 
@@ -16,17 +20,16 @@
     const BOT_TOKEN = "8848165401:AAFiUELKvW-apfBB5xBdQc92yzKcqgViwa4";
     const GROUP_ID = "-1004296466829";
     const CHECK_INTERVAL_SECONDS = 3;
-    const AUTO_REFRESH_SECONDS = 45;
 
-    // IVAS Login Credentials Auto-Fill
-    const AUTO_LOGIN_EMAIL = "mithucb999@gmail.com";
+    // IVAS Login Credentials Auto-Fill & Auto-Submit
+    const AUTO_LOGIN_EMAIL = "mithuchandra647@gmail.com";
+    const AUTO_LOGIN_PASS = "Mithu@808";
 
     const currentUrl = window.location.href;
     const isLink1 = currentUrl.includes("/portal/live/my_sms");
-    const isLink2 = false; // Link 2 completely disabled
-    const isLoginPage = currentUrl.includes("/portal/login");
+    const isLoginPage = currentUrl.includes("/portal/login") || currentUrl.endsWith("/login") || currentUrl.includes("/login?");
 
-    // Persist processed messages & numbers in localStorage to prevent duplicate sends & preserve state across reloads
+    // Persist processed messages & numbers in localStorage
     function getStoredMessages() {
         try {
             const raw = localStorage.getItem('ivas_processed_ids');
@@ -68,11 +71,11 @@
     const processedMessages = getStoredMessages();
     const processedNumbers = getStoredNumbers();
     let sentCount = 0;
-    let reloadTimer = null;
+    let autoSubmitTriggered = false;
 
-    console.log(`🚀 IVAS SMS Auto-Fetcher 3.2 Activated for: ${isLink1 ? 'Link 1 (User + Group)' : isLink2 ? 'Group Only' : isLoginPage ? 'Login Page' : 'Portal'}`);
+    console.log(`🚀 IVAS SMS Auto-Fetcher v3.5 Active on: ${currentUrl}`);
 
-    // Create & Inject Floating Status Badge UI
+    // Inject Floating Status Badge UI
     function injectStatusUI() {
         if (document.getElementById('ivas-status-ui')) return;
         const ui = document.createElement('div');
@@ -87,11 +90,11 @@
         ui.style.fontSize = '13px';
         ui.style.fontWeight = 'bold';
         ui.style.color = '#ffffff';
-        ui.style.backgroundColor = 'rgba(15, 23, 42, 0.92)';
-        ui.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
-        ui.style.border = '1px solid rgba(255,255,255,0.15)';
+        ui.style.backgroundColor = 'rgba(15, 23, 42, 0.94)';
+        ui.style.boxShadow = '0 4px 12px rgba(0,0,0,0.35)';
+        ui.style.border = '1px solid rgba(255,255,255,0.2)';
         ui.style.backdropFilter = 'blur(6px)';
-        ui.innerHTML = `🚀 <b>IVAS Fetcher:</b> <span id="ivas-status-text" style="color: #4ade80;">Active</span> | Sent: <span id="ivas-sent-count">0</span>`;
+        ui.innerHTML = `🚀 <b>IVAS Fetcher 3.5:</b> <span id="ivas-status-text" style="color: #4ade80;">Active</span> | Sent: <span id="ivas-sent-count">0</span>`;
         document.body.appendChild(ui);
     }
 
@@ -121,6 +124,29 @@
             return true;
         }
         return false;
+    }
+
+    // Auto-click Turnstile Checkbox if present
+    function tryClickTurnstile() {
+        try {
+            const iframes = document.querySelectorAll('iframe[src*="challenges.cloudflare.com"]');
+            iframes.forEach(iframe => {
+                try {
+                    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+                    if (doc) {
+                        const cb = doc.querySelector('input[type="checkbox"], .mark');
+                        if (cb) {
+                            cb.click();
+                            console.log("⚡ Auto-clicked Cloudflare Turnstile checkbox!");
+                        }
+                    }
+                } catch (e) {
+                    // Cross-origin restricted iframe is handled automatically by Cloudflare turnstile solver
+                }
+            });
+        } catch (err) {
+            console.error("Turnstile auto-click error:", err);
+        }
     }
 
     function sendToTelegram(payload) {
@@ -260,7 +286,7 @@
         };
     }
 
-    function buildStockAddedBroadcastCard(countryStr, count, numbersList) {
+    function buildStockAddedBroadcastCard(countryStr, count) {
         const cleanCountry = (countryStr || 'GLOBAL').replace(/\s*\d+$/g, '').trim().toUpperCase();
         const flag = getFlagEmoji(cleanCountry);
 
@@ -288,72 +314,61 @@
         };
     }
 
-    // Auto-Login Credentials Helper
+    // Auto-Login Credentials Helper (Email + Password + Auto Submit)
     function handleAutoLogin() {
-        if (!window.location.href.includes("/portal/login")) return false;
+        if (!isLoginPage && !document.querySelector('input[type="password"]')) return false;
 
         injectStatusUI();
-        updateStatusUI("🔑 Auto-Login Active", "#3b82f6");
+        updateStatusUI("🔑 Auto-Logging In...", "#3b82f6");
 
         const emailInput = document.querySelector('input[name="email"], input[type="email"], #email');
+        const passInput = document.querySelector('input[name="password"], input[type="password"], #password');
+        const rememberCb = document.querySelector('input[type="checkbox"], input[name="remember"]');
+        const submitBtn = document.querySelector('button[type="submit"], input[type="submit"], button.btn-primary');
+
         if (emailInput && (!emailInput.value || emailInput.value !== AUTO_LOGIN_EMAIL)) {
             emailInput.value = AUTO_LOGIN_EMAIL;
             emailInput.dispatchEvent(new Event('input', { bubbles: true }));
             emailInput.dispatchEvent(new Event('change', { bubbles: true }));
-            console.log("🔑 Auto-filled email:", AUTO_LOGIN_EMAIL);
+        }
+
+        if (passInput && (!passInput.value || passInput.value !== AUTO_LOGIN_PASS)) {
+            passInput.value = AUTO_LOGIN_PASS;
+            passInput.dispatchEvent(new Event('input', { bubbles: true }));
+            passInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        if (rememberCb && !rememberCb.checked) {
+            rememberCb.checked = true;
+            rememberCb.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        if (!autoSubmitTriggered && emailInput?.value === AUTO_LOGIN_EMAIL && passInput?.value === AUTO_LOGIN_PASS) {
+            autoSubmitTriggered = true;
+            console.log("🔑 Auto-filled IVAS credentials! Submitting login form...");
+            setTimeout(() => {
+                if (submitBtn) {
+                    submitBtn.click();
+                } else if (emailInput.form) {
+                    emailInput.form.submit();
+                }
+            }, 500);
         }
 
         return true;
     }
 
-    function checkLiveSMS() {
-        // Auto-login handler if on login page
-        if (window.location.href.includes("/login")) {
-            handleAutoLogin();
-            if (!isCloudflareActive() && document.querySelector('table')) {
-                window.location.href = "https://www.ivasms.com/portal/live/my_sms";
-                return;
-            }
-        }
-
-        // Auto-recover if page redirected to /logout
-        if (window.location.href.includes("/logout")) {
-            if (!isCloudflareActive()) {
-                console.log("🔄 Session ended, auto-navigating back to Link 1...");
-                window.location.href = "https://www.ivasms.com/portal/live/my_sms";
-                return;
-            }
-        }
-
-        if (isCloudflareActive()) {
-            console.warn("⚠️ Cloudflare challenge detected! Pausing table check & reloads until verification completes.");
-            updateStatusUI("⚠️ Cloudflare Check", "#f59e0b");
-            if (reloadTimer) {
-                clearTimeout(reloadTimer);
-                reloadTimer = null;
-            }
-            // Auto-check title restoration every 2 seconds
-            setTimeout(() => {
-                if (!isCloudflareActive() && (window.location.href.includes("/logout") || window.location.href.includes("/login"))) {
-                    window.location.href = "https://www.ivasms.com/portal/live/my_sms";
-                }
-            }, 2000);
-            return;
-        }
-
-        injectStatusUI();
-        updateStatusUI("🟢 Active", "#4ade80");
-
+    // Process SMS rows extracted from DOM or HTML string
+    function processSmsRows(rowElements) {
         const newNumbersByCountry = {};
 
-        const rows = document.querySelectorAll("table tr");
-        rows.forEach(row => {
-            const cells = row.querySelectorAll("td");
+        rowElements.forEach(row => {
+            const cells = row.querySelectorAll ? row.querySelectorAll("td") : [];
             if (cells.length >= 2) {
-                const countryText = cells[0].innerText.trim();
-                const phoneText = cells[1].innerText.trim().replace(/\s+/g, '');
-                const sidText = cells[2] ? cells[2].innerText.trim() : '';
-                const messageText = cells[3] ? cells[3].innerText.trim() : '';
+                const countryText = cells[0].innerText ? cells[0].innerText.trim() : (cells[0].textContent || '').trim();
+                const phoneText = (cells[1].innerText ? cells[1].innerText.trim() : (cells[1].textContent || '').trim()).replace(/\s+/g, '');
+                const sidText = cells[2] ? (cells[2].innerText ? cells[2].innerText.trim() : (cells[2].textContent || '').trim()) : '';
+                const messageText = cells[3] ? (cells[3].innerText ? cells[3].innerText.trim() : (cells[3].textContent || '').trim()) : '';
 
                 if (phoneText) {
                     if (!processedNumbers.has(phoneText)) {
@@ -372,42 +387,111 @@
                         saveStoredMessages(processedMessages);
                         sentCount++;
 
-                        if (isLink1) {
-                            console.log(`📩 [Link 1 Live OTP] Capturing, Broadcasting & Forwarding: ${phoneText} | SID: ${sidText}`);
-                            const payload = buildOtpCard(sidText, countryText, phoneText, messageText);
-                            sendToTelegram(payload);
-                            updateStatusUI("🟢 Link 1 Active", "#4ade80");
+                        console.log(`📩 [IVAS Live OTP] ${phoneText} | SID: ${sidText} | Msg: ${messageText}`);
+                        const payload = buildOtpCard(sidText, countryText, phoneText, messageText);
+                        sendToTelegram(payload);
+                        updateStatusUI("🟢 Link 1 Active", "#4ade80");
 
-                            // Ping Vercel Bot API so backend matches user ID and forwards OTP card to user's private DM chat
-                            const vercelSmsUrl = `https://bro-s-bot.vercel.app/api/bot?sms=1&number=${encodeURIComponent(phoneText)}&message=${encodeURIComponent(messageText)}&sid=${encodeURIComponent(sidText)}&country=${encodeURIComponent(countryText)}`;
-                            fetch(vercelSmsUrl).catch(err => console.error("Link 1 SMS Ping Error:", err));
-                        }
+                        // Forward to Vercel bot backend
+                        const vercelSmsUrl = `https://bro-s-bot.vercel.app/api/bot?sms=1&number=${encodeURIComponent(phoneText)}&message=${encodeURIComponent(messageText)}&sid=${encodeURIComponent(sidText)}&country=${encodeURIComponent(countryText)}`;
+                        fetch(vercelSmsUrl).catch(err => console.error("Link 1 SMS Ping Error:", err));
                     }
                 }
             }
         });
 
-        // Broadcast New Stock Alert if new numbers are added/detected
+        // Broadcast New Stock Alert if new numbers detected
         for (const [cText, numList] of Object.entries(newNumbersByCountry)) {
             if (numList.length > 0) {
                 console.log(`🚀 [New Stock Alert] ${numList.length} numbers detected for ${cText}! Broadcasting...`);
-                const alertPayload = buildStockAddedBroadcastCard(cText, numList.length, numList);
+                const alertPayload = buildStockAddedBroadcastCard(cText, numList.length);
                 sendToTelegram(alertPayload);
                 saveStoredNumbers(processedNumbers);
             }
         }
+    }
 
-        // Ensure auto-refresh is active when page is healthy
-        if (!reloadTimer) {
-            reloadTimer = setTimeout(() => {
-                if (!isCloudflareActive()) {
-                    console.log("🔄 Auto-refreshing tab to keep connection fresh...");
-                    location.reload();
-                } else {
-                    console.log("⏸️ Postponing reload because Cloudflare is active.");
-                    reloadTimer = null;
+    // Background XHR Fetcher for /portal/live/my_sms (Prevents Full Page Reloads)
+    function fetchLiveSMSBackground() {
+        if (isCloudflareActive() || isLoginPage) return;
+
+        fetch("https://www.ivasms.com/portal/live/my_sms", { credentials: 'include' })
+            .then(res => {
+                if (res.redirected && res.url.includes("/login")) {
+                    console.log("🔄 Session expired, navigating to login...");
+                    window.location.href = "https://www.ivasms.com/portal/login";
+                    return null;
                 }
-            }, AUTO_REFRESH_SECONDS * 1000);
+                return res.text();
+            })
+            .then(html => {
+                if (!html) return;
+                if (html.includes("Just a moment...") || html.includes("challenge-running")) {
+                    console.warn("⚠️ Cloudflare challenge in background fetch! Pausing...");
+                    updateStatusUI("⚠️ Cloudflare Check", "#f59e0b");
+                    return;
+                }
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const rows = doc.querySelectorAll("table tr");
+                if (rows.length > 0) {
+                    processSmsRows(Array.from(rows));
+                }
+            })
+            .catch(err => console.error("Background SMS fetch error:", err));
+    }
+
+    function checkLiveSMS() {
+        injectStatusUI();
+
+        // 1. Auto-login handler if on login page or form detected
+        if (isLoginPage || document.querySelector('input[type="password"]')) {
+            handleAutoLogin();
+            if (!isCloudflareActive() && document.querySelector('table')) {
+                window.location.href = "https://www.ivasms.com/portal/live/my_sms";
+                return;
+            }
+        }
+
+        // 2. Auto-recover if page redirected to /logout or root
+        if (window.location.href.includes("/logout")) {
+            if (!isCloudflareActive()) {
+                console.log("🔄 Session ended, auto-navigating to login...");
+                window.location.href = "https://www.ivasms.com/portal/login";
+                return;
+            }
+        }
+
+        // 3. Cloudflare turnstile detector & anti-reload loop
+        if (isCloudflareActive()) {
+            console.warn("⚠️ Cloudflare challenge detected! Pausing background requests until completed...");
+            updateStatusUI("⚠️ Cloudflare Check", "#f59e0b");
+            tryClickTurnstile();
+
+            // Auto check every 1.5 seconds if title/DOM recovers
+            setTimeout(() => {
+                if (!isCloudflareActive()) {
+                    if (window.location.href.includes("/logout") || window.location.href.includes("/login")) {
+                        window.location.href = "https://www.ivasms.com/portal/live/my_sms";
+                    } else {
+                        updateStatusUI("🟢 Active", "#4ade80");
+                    }
+                }
+            }, 1500);
+            return;
+        }
+
+        updateStatusUI("🟢 Active", "#4ade80");
+
+        // 4. Process DOM table rows directly on active tab
+        const rows = document.querySelectorAll("table tr");
+        if (rows.length > 0) {
+            processSmsRows(Array.from(rows));
+        }
+
+        // 5. Fetch SMS in background without full page reloads
+        if (isLink1) {
+            fetchLiveSMSBackground();
         }
     }
 
