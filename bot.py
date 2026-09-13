@@ -750,7 +750,7 @@ def handle_update(update):
             return
 
         # Receive Live SMS from IVAS Portal
-        if text.startsWith("/receivesms") and is_admin:
+        if text.startswith("/receivesms") and is_admin:
             raw = text.replace("/receivesms", "").strip()
             sp = raw.find(' ')
             if sp != -1:

@@ -500,31 +500,7 @@ module.exports = async function handler(req, res) {
             }
           }
 
-          if (state.step === 'WAITING_COUNTRY') {
-            const countryObj = addCountry(text);
-            state.countryObj = countryObj;
-            state.step = 'WAITING_SERVICE';
-
-            const svcs = getServices(true);
-            const svcButtons = [];
-            for (let i = 0; i < svcs.length; i += 2) {
-              const row = [{ text: `${svcs[i].icon} ${svcs[i].name}` }];
-              if (svcs[i + 1]) row.push({ text: `${svcs[i + 1].icon} ${svcs[i + 1].name}` });
-              svcButtons.push(row);
-            }
-            svcButtons.push([{ text: "🏠 Main Menu" }]);
-
-            await sendTelegramRequest('sendMessage', {
-              chat_id: chatId,
-              text: `📌 **Country Set:** ${countryObj.flag} **${countryObj.name}** (\`${countryObj.code}\`)\n\n📱 **ADD STOCK (STEP 3/3) — SELECT / TYPE SERVICE**\n\nWhich service is this stock for?\nSelect or type service name (e.g. \`WhatsApp\`, \`Facebook\`, \`IMO\`):\n\n_Note: If service doesn't exist, bot will automatically create & add it!_`,
-              parse_mode: 'Markdown',
-              reply_markup: { keyboard: svcButtons, resize_keyboard: true, is_persistent: true }
-            });
-            return res.status(200).json({ ok: true });
-          }
-
           if (state.step === 'WAITING_SERVICE') {
-            const countryObj = state.countryObj || { code: 'GLOBAL', name: 'GLOBAL', flag: '🌐' };
             const cleanSvcName = text.replace(/^[^\w\s]/g, '').trim() || text.trim();
             let serviceObj = getServices(true).find(s => 
               s.name.toLowerCase() === cleanSvcName.toLowerCase() ||
@@ -539,7 +515,32 @@ module.exports = async function handler(req, res) {
               createdNotice = `✨ **Created new service:** ${serviceObj.icon} **${serviceObj.name}**\n\n`;
             }
 
+            state.serviceObj = serviceObj;
+            state.step = 'WAITING_COUNTRY';
+
+            const cList = getCountries(true);
+            const cButtons = [];
+            for (let i = 0; i < cList.length; i += 2) {
+              const row = [{ text: `${cList[i].flag} ${cList[i].name}` }];
+              if (cList[i + 1]) row.push({ text: `${cList[i + 1].flag} ${cList[i + 1].name}` });
+              cButtons.push(row);
+            }
+            cButtons.push([{ text: "🏠 Main Menu" }]);
+
+            await sendTelegramRequest('sendMessage', {
+              chat_id: chatId,
+              text: `${createdNotice}📌 **Service Set:** ${serviceObj.icon} **${serviceObj.name}**\n\n🌍 **ADD STOCK (STEP 3/3) — SELECT / TYPE COUNTRY**\n\nWhich country is this stock for?\nSelect or type country name or code (e.g. \`USA\`, \`Bangladesh\`, \`Myanmar\`, \`US\`, \`BD\`, \`MM\`):\n\n_Note: Bot will auto-match country code & flag emoji!_`,
+              parse_mode: 'Markdown',
+              reply_markup: { keyboard: cButtons, resize_keyboard: true, is_persistent: true }
+            });
+            return res.status(200).json({ ok: true });
+          }
+
+          if (state.step === 'WAITING_COUNTRY') {
+            const countryObj = addCountry(text);
+            const serviceObj = state.serviceObj || { id: 'whatsapp', name: 'WhatsApp', icon: '💬' };
             const result = addStock(serviceObj.id, countryObj.code, state.numbers || []);
+
             state.step = 'ASK_ADD_MORE_STOCK';
 
             await logToGroup(buildStockAddedCard(countryObj.name, countryObj.code, result.addedCount, state.numbers || []));
@@ -552,7 +553,7 @@ module.exports = async function handler(req, res) {
               is_persistent: true
             };
 
-            const confirmMsg = `${createdNotice}╔═══════════════════════════════════════╗\n   ✅ **STOCK UPLOADED SUCCESSFULLY!**\n╚═══════════════════════════════════════╝\n\n🌐 **Country:** ${countryObj.flag} **${countryObj.name}** (\`${countryObj.code}\`)\n📱 **Service:** ${serviceObj.icon} **${serviceObj.name}**\n📊 **Added Numbers:** \`${result.addedCount}\`\n\n❓ **Do you want to add more stock?**`;
+            const confirmMsg = `╔═══════════════════════════════════════╗\n   ✅ **STOCK UPLOADED SUCCESSFULLY!**\n╚═══════════════════════════════════════╝\n\n📱 **Service:** ${serviceObj.icon} **${serviceObj.name}**\n🌐 **Country:** ${countryObj.flag} **${countryObj.name}** (\`${countryObj.code}\`)\n📊 **Added Numbers:** \`${result.addedCount}\` numbers added to stock & broadcasted!\n\n❓ **Do you want to add more stock?**`;
 
             await sendTelegramRequest('sendMessage', {
               chat_id: chatId,
@@ -677,21 +678,21 @@ module.exports = async function handler(req, res) {
                 reply_markup: confirmKeyboard
               });
             } else {
-              sessionState[chatId] = { step: 'WAITING_COUNTRY', numbers: numberLines };
-              const cList = getCountries(true);
-              const cButtons = [];
-              for (let i = 0; i < cList.length; i += 2) {
-                const row = [{ text: `${cList[i].flag} ${cList[i].name}` }];
-                if (cList[i + 1]) row.push({ text: `${cList[i + 1].flag} ${cList[i + 1].name}` });
-                cButtons.push(row);
+              sessionState[chatId] = { step: 'WAITING_SERVICE', numbers: numberLines };
+              const svcs = getServices(true);
+              const svcButtons = [];
+              for (let i = 0; i < svcs.length; i += 2) {
+                const row = [{ text: `${svcs[i].icon} ${svcs[i].name}` }];
+                if (svcs[i + 1]) row.push({ text: `${svcs[i + 1].icon} ${svcs[i + 1].name}` });
+                svcButtons.push(row);
               }
-              cButtons.push([{ text: "🏠 Main Menu" }]);
+              svcButtons.push([{ text: "🏠 Main Menu" }]);
 
               await sendTelegramRequest('sendMessage', {
                 chat_id: chatId,
-                text: `📄 **File Received! (${numberLines.length} numbers)**\n\n🌍 **ADD STOCK (STEP 2/3) — SELECT / TYPE COUNTRY**\n\nWhich country is this stock for?\nType country name or code (e.g. \`USA\`, \`Bangladesh\`, \`US\`, \`BD\`):\n\n_Bot will auto-match country code & flag emoji!_`,
+                text: `📄 **File Received! (\`${numberLines.length}\` numbers)**\n\n📱 **ADD STOCK (STEP 2/3) — SELECT / TYPE SERVICE**\n\nWhich service is this stock for?\nSelect or type service name (e.g. \`WhatsApp\`, \`Telegram\`, \`IMO\`, \`Facebook\`):\n\n_Note: If service doesn't exist, bot will automatically create & add it!_`,
                 parse_mode: 'Markdown',
-                reply_markup: { keyboard: cButtons, resize_keyboard: true }
+                reply_markup: { keyboard: svcButtons, resize_keyboard: true, is_persistent: true }
               });
             }
           } catch (err) {
