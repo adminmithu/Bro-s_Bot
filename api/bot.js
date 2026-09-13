@@ -88,13 +88,17 @@ async function sendServiceSelection(chatId) {
 
   const keyboard = [];
   for (let i = 0; i < services.length; i += 2) {
-    const row = [{ text: services[i].name.toUpperCase(), style: "primary" }];
+    const s1 = services[i];
+    const icon1 = s1.icon || getServiceIcon(s1.name);
+    const row = [{ text: `${icon1} ${s1.name.toUpperCase()}`, style: "primary" }];
     if (services[i + 1]) {
-      row.push({ text: services[i + 1].name.toUpperCase(), style: "primary" });
+      const s2 = services[i + 1];
+      const icon2 = s2.icon || getServiceIcon(s2.name);
+      row.push({ text: `${icon2} ${s2.name.toUpperCase()}`, style: "primary" });
     }
     keyboard.push(row);
   }
-  keyboard.push([{ text: "Main Menu", style: "primary" }]);
+  keyboard.push([{ text: "🏠 Main Menu", style: "primary" }]);
 
   return await sendTelegramRequest('sendMessage', {
     chat_id: chatId,
@@ -118,46 +122,61 @@ async function sendCountrySelection(chatId, serviceId) {
   for (let i = 0; i < countries.length; i += 2) {
     const c1 = countries[i];
     const stock1 = getStockCount(serviceId, c1.code);
-    const row = [{ text: `${c1.name.toUpperCase()} (${stock1})`, style: "success" }];
+    const row = [{ text: `${c1.flag || '🌐'} ${c1.name.toUpperCase()} (${stock1})`, style: stock1 > 0 ? "success" : "danger" }];
 
     if (countries[i + 1]) {
       const c2 = countries[i + 1];
       const stock2 = getStockCount(serviceId, c2.code);
-      row.push({ text: `${c2.name.toUpperCase()} (${stock2})`, style: "success" });
+      row.push({ text: `${c2.flag || '🌐'} ${c2.name.toUpperCase()} (${stock2})`, style: stock2 > 0 ? "success" : "danger" });
     }
     keyboard.push(row);
   }
 
-  keyboard.push([{ text: "Back to Services", style: "primary" }, { text: "Main Menu", style: "primary" }]);
+  keyboard.push([{ text: "⬅️ Back to Services", style: "primary" }, { text: "🏠 Main Menu", style: "primary" }]);
 
   return await sendTelegramRequest('sendMessage', {
     chat_id: chatId,
-    text: `🌏 **Select Country for ${service.name.toUpperCase()}:**\n\n_Note: Dispenses 4 numbers instantly!_`,
+    text: `🌏 **Select Country for ${service.icon || '📱'} ${service.name.toUpperCase()}:**\n\n_Note: Dispenses 4 numbers instantly from available stock!_`,
     parse_mode: 'Markdown',
     reply_markup: { keyboard, resize_keyboard: true, is_persistent: true }
   });
 }
 
-// Dispense 4 Numbers instantly
+// Dispense 4 Numbers instantly from Stock
 async function sendDispensed4Numbers(chatId, serviceId, countryCode) {
   const result = get4Numbers(serviceId, countryCode, chatId);
   const country = getCountries().find(c => c.code === countryCode) || { flag: '🌐', name: countryCode };
   const service = getServices(true).find(s => s.id === serviceId) || { icon: '📱', name: serviceId };
 
+  if (!result.success || !result.numbers || result.numbers.length === 0) {
+    return await sendTelegramRequest('sendMessage', {
+      chat_id: chatId,
+      text: `⚠️ **OUT OF STOCK!**\n\nNo numbers currently available for ${service.icon || '📱'} **${service.name}** (${country.flag || '🌐'} ${country.name}).\n\nPlease wait for admin to add stock or select another country.`,
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "⬅️ Back to Services", callback_data: "back_to_services" }],
+          [{ text: "🏠 Main Menu", callback_data: "back_to_main_menu" }]
+        ]
+      }
+    });
+  }
+
   let text = `==============================\n`;
   text += `✨ **4 NUMBERS DISPENSED** ✨\n`;
   text += `==============================\n\n`;
-  text += `📌 **Service:** ${service.name}\n`;
-  text += `🌐 **Country:** ${country.name}\n\n`;
+  text += `📌 **Service:** ${service.icon || '📱'} ${service.name}\n`;
+  text += `🌐 **Country:** ${country.flag || '🌐'} ${country.name}\n\n`;
   text += `📱 **Assigned Phone Numbers:**\n`;
   result.numbers.forEach((num, idx) => {
     text += `${idx + 1}️⃣ \`${num}\`\n`;
   });
-  text += `\n💡 **Tip:** Tap any number to copy instantly. Search OTP after sending SMS!`;
+  text += `\n💡 **Tip:** Tap any number to copy instantly! Search OTP after sending SMS.`;
 
   const inlineKeyboard = [
-    ...result.numbers.map(num => [{ text: `Copy ${num}`, callback_data: `copy_${num}`, copy_text: { text: num }, style: "primary" }]),
-    [{ text: "Search OTP", callback_data: "cmd_search_otp", style: "success" }, { text: "Main Menu", callback_data: "back_to_main_menu", style: "primary" }]
+    ...result.numbers.map(num => [{ text: `Copy ${num} 📋`, callback_data: `copy_${num}`, copy_text: { text: num }, style: "primary" }]),
+    [{ text: "🔎 Search OTP", callback_data: "cmd_search_otp", style: "success" }, { text: "🏠 Main Menu", callback_data: "back_to_main_menu", style: "primary" }],
+    [{ text: "❌ Close", callback_data: "close_msg", style: "danger" }]
   ];
 
   return await sendTelegramRequest('sendMessage', {
