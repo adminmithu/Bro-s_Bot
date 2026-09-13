@@ -8,6 +8,21 @@ import re
 import requests
 import time
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    if os.path.exists(".env"):
+        try:
+            with open(".env", "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        os.environ.setdefault(k.strip(), v.strip())
+        except Exception:
+            pass
+
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8848165401:AAFiUELKvW-apfBB5xBdQc92yzKcqgViwa4")
 ADMIN_ID = os.getenv("ADMIN_ID", "8929349073")
 GROUP_ID = os.getenv("GROUP_ID", "-1004296466829")
