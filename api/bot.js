@@ -1024,12 +1024,26 @@ module.exports = async function handler(req, res) {
 
         if (!isAdminKeyword) {
           const allSvcs = getServices(false);
-          const matchedSvc = allSvcs.find(s => 
+          const cleanNoEmoji = cleanText.toLowerCase().replace(/^[^\w\s]/g, '').trim();
+          let matchedSvc = allSvcs.find(s => 
             cleanText.toLowerCase() === s.name.toLowerCase() ||
             cleanText.toLowerCase() === s.id.toLowerCase() ||
             cleanText.toLowerCase().includes(s.name.toLowerCase()) ||
-            s.name.toLowerCase().includes(cleanText.toLowerCase().replace(/^[^\w\s]/g, '').trim())
+            s.name.toLowerCase().includes(cleanNoEmoji) ||
+            cleanNoEmoji.includes(s.name.toLowerCase())
           );
+
+          if (!matchedSvc) {
+            if (cleanNoEmoji.includes('faceb') || cleanNoEmoji.includes('fb')) {
+              matchedSvc = allSvcs.find(s => s.id === 'facebook' || s.name.toLowerCase().includes('faceb'));
+            } else if (cleanNoEmoji.includes('what') || cleanNoEmoji.includes('wa')) {
+              matchedSvc = allSvcs.find(s => s.id === 'whatsapp' || s.name.toLowerCase().includes('what'));
+            } else if (cleanNoEmoji.includes('teleg') || cleanNoEmoji.includes('tg')) {
+              matchedSvc = allSvcs.find(s => s.id === 'telegram' || s.name.toLowerCase().includes('teleg'));
+            } else if (cleanNoEmoji.includes('insta') || cleanNoEmoji.includes('ig')) {
+              matchedSvc = allSvcs.find(s => s.id === 'instagram' || s.name.toLowerCase().includes('insta'));
+            }
+          }
 
           if (matchedSvc) {
             sessionState[chatId] = { ...(sessionState[chatId] || {}), lastServiceId: matchedSvc.id };

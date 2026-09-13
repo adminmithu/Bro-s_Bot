@@ -158,6 +158,89 @@ db_user_stats = {}
 db_banned_users = set()
 db_all_users = set()
 
+import json
+
+DB_FILE_PATH = "bot_db.json"
+
+def save_db():
+    try:
+        data = {
+            'isMaintenance': db_maintenance,
+            'services': db_services,
+            'countries': db_countries,
+            'stock': db_stock,
+            'issuedNumbers': db_issued_numbers,
+            'userStats': db_user_stats,
+            'bannedUsers': list(db_banned_users),
+            'allUsers': list(db_all_users)
+        }
+        with open(DB_FILE_PATH, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        print("[DB Save Error]:", e)
+
+def load_db():
+    global db_maintenance, db_services, db_countries, db_stock, db_issued_numbers, db_user_stats, db_banned_users, db_all_users
+    try:
+        if os.path.exists(DB_FILE_PATH):
+            with open(DB_FILE_PATH, 'r', encoding='utf-8') as f:
+                loaded = json.load(f)
+                if loaded:
+                    db_maintenance = loaded.get('isMaintenance', db_maintenance)
+                    if loaded.get('services'): db_services = loaded['services']
+                    if loaded.get('countries'): db_countries = loaded['countries']
+                    if loaded.get('stock'): db_stock = loaded['stock']
+                    if loaded.get('issuedNumbers'): db_issued_numbers = loaded['issuedNumbers']
+                    if loaded.get('userStats'): db_user_stats = loaded['userStats']
+                    if loaded.get('bannedUsers'): db_banned_users = set(loaded['bannedUsers'])
+                    if loaded.get('allUsers'): db_all_users = set(loaded['allUsers'])
+    except Exception as e:
+        print("[DB Load Error]:", e)
+
+load_db()
+
+def resolve_stock_key(service_id, country_code):
+    load_db()
+    clean_svc = str(service_id).lower().strip()
+    clean_ctry = str(country_code).upper().strip()
+
+    found_c = next((c for c in db_countries if c['code'] == clean_ctry or c['name'].upper() == clean_ctry), None)
+    if found_c:
+        clean_ctry = found_c['code']
+
+    canonical_svc = clean_svc
+    if 'faceb' in clean_svc or 'fb' in clean_svc: canonical_svc = 'facebook'
+    elif 'what' in clean_svc or 'wa' in clean_svc: canonical_svc = 'whatsapp'
+    elif 'teleg' in clean_svc or 'tg' in clean_svc: canonical_svc = 'telegram'
+    elif 'insta' in clean_svc or 'ig' in clean_svc: canonical_svc = 'instagram'
+
+    possibilities = [
+        f"{clean_svc}:{clean_ctry}",
+        f"{canonical_svc}:{clean_ctry}",
+        f"{clean_svc}:{str(country_code).upper().strip()}",
+        f"{canonical_svc}:{str(country_code).upper().strip()}"
+    ]
+
+    for p in possibilities:
+        if p in db_stock and len(db_stock[p]) > 0:
+            return p
+
+    for k, v in db_stock.items():
+        if v and len(v) > 0 and ':' in k:
+            parts = k.split(':')
+            k_svc, k_ctry = parts[0], parts[1]
+            if k_ctry == clean_ctry or k_ctry == str(country_code).upper().strip():
+                if k_svc == clean_svc or k_svc == canonical_svc or clean_svc in k_svc or k_svc in clean_svc:
+                    return k
+    return possibilities[0]
+
+def get_stock_count(service_id, country_code):
+    load_db()
+    key = resolve_stock_key(service_id, country_code)
+    if key and key in db_stock:
+        return len(db_stock[key])
+    return 0
+
 def send_telegram_request(method, payload):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/{method}"
     try:
@@ -296,14 +379,12 @@ def send_country_selection(chat_id, service_id):
     for i in range(0, len(db_countries), 2):
         row = []
         c1 = db_countries[i]
-        key1 = f"{service_id}:{c1['code']}"
-        stock1 = len(db_stock.get(key1, []))
+        stock1 = get_stock_count(service_id, c1['code'])
         row.append({"text": f"{c1['flag']} {c1['name']} ({stock1})", "callback_data": f"num_{service_id}_{c1['code']}"})
 
         if i + 1 < len(db_countries):
             c2 = db_countries[i + 1]
-            key2 = f"{service_id}:{c2['code']}"
-            stock2 = len(db_stock.get(key2, []))
+            stock2 = get_stock_count(service_id, c2['code'])
             row.append({"text": f"{c2['flag']} {c2['name']} ({stock2})", "callback_data": f"num_{service_id}_{c2['code']}"})
         inline_keyboard.append(row)
 
@@ -556,8 +637,8 @@ def handle_update(update):
         elif data.startswith("num_"):
             parts = data.split("_")
             service_id, country_code = parts[1], parts[2]
-            key = f"{service_id}:{country_code}"
-            available = db_stock.get(key, [])
+            key = resolve_stock_key(service_id, country_code)
+            available = db_stock.get(key, []) if key else []
 
             if not available:
                 send_telegram_request("sendMessage", {
@@ -574,6 +655,7 @@ def handle_update(update):
             else:
                 dispensed = available[:4]
                 db_stock[key] = available[4:]
+                save_db()
 
                 c_info = next((c for c in db_countries if c['code'] == country_code), {'flag': '🌐', 'name': country_code})
                 s_info = next((s for s in db_services if s['id'] == service_id), {'icon': '📱', 'name': service_id})
