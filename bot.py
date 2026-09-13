@@ -905,13 +905,14 @@ def handle_update(update):
                 send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': msg, 'parse_mode': 'Markdown'})
             return
 
-        if text == "/admin" or text == "⚙️ Admin Panel":
+        lower_text = text.lower()
+        if lower_text == "/admin" or "admin panel" in lower_text:
             if is_admin: send_admin_panel(chat_id)
-        elif text == "/start" or "Start" in text:
+        elif lower_text == "/start" or "main menu" in lower_text:
             send_main_menu(chat_id)
-        elif text == "📲 Get Number" or "Get Number" in text:
+        elif "get number" in lower_text or lower_text == "/getnumber":
             send_service_selection(chat_id)
-        elif text == "📞 Support":
+        elif "support" in lower_text:
             support_msg = "💎 **Bro's Number Bot — Support Center** 💎\n\nNeed assistance with virtual numbers or OTP verification? Contact our admin team below:"
             send_telegram_request("sendMessage", {
                 'chat_id': chat_id,

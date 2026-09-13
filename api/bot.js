@@ -327,6 +327,7 @@ module.exports = async function handler(req, res) {
         const isGroup = message.chat.type === 'group' || message.chat.type === 'supergroup' || chatId < 0;
         const text = (message.text || '').trim();
         const cleanText = text;
+        const lowerText = text.toLowerCase();
         const isUserAdmin = !ADMIN_ID || String(chatId).trim() === String(ADMIN_ID).trim() || String(chatId) === '8929349073';
 
         if (isGroup) return res.status(200).json({ ok: true });
@@ -334,7 +335,7 @@ module.exports = async function handler(req, res) {
         registerUser(chatId);
 
         // Global Navigation
-        if (text === '/start' || text === '🏠 Main Menu' || text === 'Main Menu') {
+        if (lowerText === '/start' || lowerText.includes('main menu')) {
           delete sessionState[chatId];
           await sendMainMenu(chatId);
           return res.status(200).json({ ok: true });
@@ -344,7 +345,7 @@ module.exports = async function handler(req, res) {
         if (isUserAdmin && sessionState[chatId]?.step) {
           const state = sessionState[chatId];
 
-          if (text === '🏠 Main Menu' || text === 'Main Menu' || text === '/start') {
+          if (lowerText.includes('main menu') || lowerText === '/start') {
             delete sessionState[chatId];
             await sendMainMenu(chatId);
             return res.status(200).json({ ok: true });
@@ -456,13 +457,13 @@ module.exports = async function handler(req, res) {
         // ---------------------------------------------------------
 
         // 1. Get Number & Services Router
-        if (cleanText === 'Get Number' || cleanText === '📲 Get Number' || cleanText.includes('Get Number') || cleanText === '⬅️ Back to Services' || cleanText === '/getnumber') {
+        if (lowerText.includes('get number') || lowerText.includes('back to services') || lowerText === '/getnumber') {
           await sendServiceSelection(chatId);
           return res.status(200).json({ ok: true });
         }
 
         // 2. Support
-        if (cleanText === 'Support' || cleanText === '📞 Support' || cleanText.includes('Support') || cleanText === '/support') {
+        if (lowerText.includes('support') || lowerText === '/support') {
           await sendTelegramRequest('sendMessage', {
             chat_id: chatId,
             text: "💎 **Bro's Number Bot — Support Center** 💎\n\nNeed help with virtual numbers or OTPs? Contact Admin below:",
@@ -472,7 +473,7 @@ module.exports = async function handler(req, res) {
         }
 
         // 3. User Profile
-        if (cleanText === 'My Profile' || cleanText === '👤 My Profile' || cleanText.includes('Profile') || cleanText === '/profile') {
+        if (lowerText.includes('profile') || lowerText === '/profile') {
           const todayOtp = getUserOtpCount(chatId);
           await sendTelegramRequest('sendMessage', {
             chat_id: chatId,
@@ -483,7 +484,7 @@ module.exports = async function handler(req, res) {
         }
 
         // 4. Search OTP Prompt
-        if (cleanText === 'Search OTP' || cleanText === '🔎 Search OTP' || cleanText.includes('Search OTP') || cleanText === '/searchotp') {
+        if (lowerText.includes('search otp') || lowerText === '/searchotp') {
           await sendTelegramRequest('sendMessage', {
             chat_id: chatId,
             text: "🔎 **SEARCH OTP BY PHONE NUMBER**\n\nPlease reply with your **Phone Number** below:\n\nExample: `+255710962660`",
@@ -493,7 +494,7 @@ module.exports = async function handler(req, res) {
         }
 
         // 5. Admin Panel Dashboard
-        if (cleanText === 'Admin Panel' || cleanText === '⚙️ Admin Panel' || cleanText === '/admin') {
+        if (lowerText.includes('admin panel') || lowerText === '/admin') {
           if (isUserAdmin) {
             await sendAdminPanel(chatId);
           } else {
