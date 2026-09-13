@@ -435,7 +435,6 @@ module.exports = async function handler(req, res) {
         // ---------------------------------------------------------
         // EXACT BUTTON MATCHERS (PREVENT UNWANTED MAIN MENU KICKOUTS)
         // ---------------------------------------------------------
-        const cleanText = text.trim();
 
         // 1. Get Number & Services Router
         if (cleanText === 'Get Number' || cleanText === '📲 Get Number' || cleanText.includes('Get Number') || cleanText === '⬅️ Back to Services' || cleanText === '/getnumber') {
