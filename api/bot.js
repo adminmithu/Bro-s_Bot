@@ -13,12 +13,15 @@ const {
   getMaintenance, registerUser, getAllUsers, recordLiveRange, getLiveRanges, getFlagEmoji,
   allocateVoltxNumber, getVoltxLiveAccess, getVoltxSuccessOtp, getVoltxConsole, registerVoltxIssuedNumber,
   formatConsoleHitCard, processAndBroadcastConsoleHits, buildNumberAddedCard, buildGroupOTPBroadcastCard,
-  setGlobalDispenseQuantity, getGlobalDispenseQuantity, setUserDispenseQuantity, getUserDispenseQuantity
+  setGlobalDispenseQuantity, getGlobalDispenseQuantity, setUserDispenseQuantity, getUserDispenseQuantity,
+  generate2FACode
 } = require('../lib/db.js');
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "8848165401:AAFiUELKvW-apfBB5xBdQc92yzKcqgViwa4";
 const ADMIN_ID = process.env.ADMIN_ID ? String(process.env.ADMIN_ID).trim() : "8929349073";
-const GROUP_ID = process.env.GROUP_ID ? String(process.env.GROUP_ID).trim() : '-1004462028404';
+const OTP_GROUP_ID = process.env.OTP_GROUP_ID || process.env.GROUP_ID || '-1004462028404';
+const RANGE_GROUP_ID = process.env.RANGE_GROUP_ID || '-1004296466829';
+const GROUP_ID = OTP_GROUP_ID;
 
 // Session State Machine for Interactive Uploads & Navigation
 const sessionState = {};
@@ -39,17 +42,74 @@ async function sendTelegramRequest(method, payload) {
   }
 }
 
-// Log message or card to Telegram Group (-1004296466829)
+// Log OTP message or card to Telegram OTP Group (-1004462028404)
 async function logToGroup(payload) {
-  if (!GROUP_ID) return;
+  if (!OTP_GROUP_ID) return;
   try {
     if (typeof payload === 'string') {
-      await sendTelegramRequest('sendMessage', { chat_id: GROUP_ID, text: payload, parse_mode: 'Markdown' });
+      await sendTelegramRequest('sendMessage', { chat_id: OTP_GROUP_ID, text: payload, parse_mode: 'Markdown' });
     } else {
-      await sendTelegramRequest('sendMessage', { chat_id: GROUP_ID, ...payload });
+      await sendTelegramRequest('sendMessage', { chat_id: OTP_GROUP_ID, ...payload });
     }
   } catch (err) {
-    console.error("Group Broadcast Error:", err);
+    console.error("OTP Group Broadcast Error:", err);
+  }
+}
+
+// Log message or range card to Telegram Range Group (-1004296466829)
+async function logToRangeGroup(payload) {
+  if (!RANGE_GROUP_ID) return;
+  try {
+    if (typeof payload === 'string') {
+      await sendTelegramRequest('sendMessage', { chat_id: RANGE_GROUP_ID, text: payload, parse_mode: 'Markdown' });
+    } else {
+      await sendTelegramRequest('sendMessage', { chat_id: RANGE_GROUP_ID, ...payload });
+    }
+  } catch (err) {
+    console.error("Range Group Broadcast Error:", err);
+  }
+}
+
+// Auto-broadcast Live Active Ranges to Range Group (-1004296466829)
+async function broadcastActiveRangesToRangeGroup() {
+  if (!RANGE_GROUP_ID) return;
+  try {
+    const resAccess = await getVoltxLiveAccess();
+    if (!resAccess.success || !resAccess.services || resAccess.services.length === 0) return;
+
+    let msg = `╔═══════════════════════════════════════╗\n`;
+    msg += `   🛰️ **VOLTX SMS — LIVE ACTIVE RANGES** 🛰️\n`;
+    msg += `╚═══════════════════════════════════════╝\n\n`;
+    msg += `🔥 **নতুন একটিভ রেঞ্জ পাওয়া গেছে (সবাই কাজ শুরু করুন)!** 🔥\n\n`;
+
+    resAccess.services.forEach(svc => {
+      const rangesStr = (svc.ranges || []).join(', ');
+      if (rangesStr) {
+        msg += `📘 **Service:** \`${svc.sid}\`\n🎯 **Active Ranges:** \`${rangesStr}\`\n\n`;
+      }
+    });
+
+    msg += `👇 **নাম্বার নেওয়ার নিয়ম:**\n`;
+    msg += `1️⃣ বটের মেইন মেনু থেকে **GET NUMBER** এ চাপুন।\n`;
+    msg += `2️⃣ পছন্দসই **Range ID** লিখে পাঠিয়ে দিন।\n`;
+    msg += `________________________________________`;
+
+    const botUsername = process.env.BOT_USERNAME || 'brosnumberbot';
+    const inlineKeyboard = [
+      [
+        { text: "📲 Get Number (Bot) ↗️", url: `https://t.me/${botUsername}?start=getnum` },
+        { text: "💬 Support 👨‍💻", url: "https://t.me/Prime90999" }
+      ]
+    ];
+
+    await sendTelegramRequest('sendMessage', {
+      chat_id: RANGE_GROUP_ID,
+      text: msg,
+      parse_mode: 'Markdown',
+      reply_markup: { inline_keyboard: inlineKeyboard }
+    });
+  } catch (err) {
+    console.error("Range Group Broadcast Error:", err);
   }
 }
 
@@ -69,7 +129,7 @@ async function getTelegramFileContent(fileId) {
 // -------------------------------------------------------------
 
 // Main Menu Keyboard
-async function sendMainMenu(chatId, text = "🔥 **JS SUPER BOT** 🔥\n________________________\nSelect Your Service Number Button") {
+async function sendMainMenu(chatId, text = "⚡ **BRO'S NUMBER BOT** ⚡\n________________________\nSelect Your Service Number Button") {
   const isUserAdmin = !ADMIN_ID || String(chatId).trim() === String(ADMIN_ID).trim() || String(chatId) === '8929349073';
   const keyboard = [
     [{ text: "GET NUMBER", style: "success" }],
@@ -988,7 +1048,7 @@ module.exports = async function handler(req, res) {
 
         // 2. View Range Router (Matches Image 2)
         if (lowerText.includes('view range') || lowerText.includes('open range') || lowerText === '/range') {
-          const groupUrl = process.env.RANGE_GROUP_URL || process.env.GROUP_URL || "https://t.me/Prime90999";
+          const groupUrl = process.env.RANGE_GROUP_URL || process.env.GROUP_URL || "https://t.me/c/4296466829/1";
           const inlineKeyboard = [
             [{ text: "Open Range Group ↗️", url: groupUrl }]
           ];
@@ -1003,9 +1063,10 @@ module.exports = async function handler(req, res) {
 
         // 3. 2FA GENARET Router
         if (lowerText.includes('2fa') || lowerText.includes('genaret') || lowerText.includes('generate')) {
+          sessionState[chatId] = { step: 'WAITING_2FA_SECRET' };
           await sendTelegramRequest('sendMessage', {
             chat_id: chatId,
-            text: "🔐 **2FA CODE GENERATOR** 🔐\n\nPlease send your **2FA Secret Key** (e.g. `JBSWY3DPEHPK3PXP`) to generate a live 6-digit TOTP verification code.\n\n_Note: You can paste any 2FA secret key anytime in chat!_",
+            text: "🔐 **2FA CODE GENERATOR** 🔐\n\nPlease send your **2FA Secret Key** (e.g. `JBSWY3DPEHPK3PXP` or `OM4GYQKUI4WUKZ3Q`) to generate a live 6-digit TOTP verification code.\n\n_Note: You can paste any 2FA secret key anytime in chat!_",
             parse_mode: 'Markdown'
           });
           return res.status(200).json({ ok: true });
@@ -1358,6 +1419,44 @@ module.exports = async function handler(req, res) {
 
 
 
+        // 2FA Secret Key Interceptor (Matches screenshot 2FA Authenticator Output format)
+        const lines2FA = cleanText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        const valid2FA = [];
+        for (const l of lines2FA) {
+          const r = generate2FACode(l);
+          if (r && r.code) valid2FA.push(r);
+        }
+
+        if (valid2FA.length > 0) {
+          delete sessionState[chatId];
+          let card2fa = `🔑 **2FA Authenticator Output**\n`;
+          card2fa += `________________________________________\n\n`;
+          valid2FA.forEach((item, idx) => {
+            card2fa += `${idx + 1}. \`${item.secret}\` | \`${item.code}\`\n`;
+          });
+
+          const first2FA = valid2FA[0];
+          const shortSecret = first2FA.secret.length > 12 ? first2FA.secret.substring(0, 12) : first2FA.secret;
+
+          const inlineKeyboard = [
+            [
+              { text: `📋 ${first2FA.code}`, callback_data: `copy_${first2FA.code}`, copy_text: { text: first2FA.code }, style: "success" },
+              { text: `🔑 ${shortSecret}`, callback_data: `copy_${first2FA.secret}`, copy_text: { text: first2FA.secret }, style: "primary" }
+            ],
+            [
+              { text: "🔙 Back to Main Menu", callback_data: "back_to_main_menu", style: "primary" }
+            ]
+          ];
+
+          await sendTelegramRequest('sendMessage', {
+            chat_id: chatId,
+            text: card2fa,
+            parse_mode: 'Markdown',
+            reply_markup: { inline_keyboard: inlineKeyboard }
+          });
+          return res.status(200).json({ ok: true });
+        }
+
         // 8. Dynamic Service Matching (Only for non-admin command inputs)
         const isAdminKeyword = [
           'delete', 'clear', 'toggle', 'admin', 'maint:', 'broadcast',
@@ -1396,9 +1495,10 @@ module.exports = async function handler(req, res) {
 
           // 9. Dynamic Country Matching (Dispenses 4 Numbers)
           const allCountries = getCountries(false);
+          const words = cleanText.toUpperCase().split(/[^A-Z]/).filter(Boolean);
           const matchedCountry = !cleanText.startsWith('/') ? allCountries.find(c => 
-            cleanText.toUpperCase().includes(c.code) || 
-            cleanText.toUpperCase().includes(c.name)
+            words.includes(c.code) || 
+            cleanText.toUpperCase() === c.name.toUpperCase()
           ) : null;
 
           if (matchedCountry) {

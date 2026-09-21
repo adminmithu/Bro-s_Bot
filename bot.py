@@ -25,7 +25,9 @@ except ImportError:
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8848165401:AAFiUELKvW-apfBB5xBdQc92yzKcqgViwa4")
 ADMIN_ID = os.getenv("ADMIN_ID", "8929349073")
-GROUP_ID = os.getenv("GROUP_ID", "-1004462028404")
+OTP_GROUP_ID = os.getenv("OTP_GROUP_ID", os.getenv("GROUP_ID", "-1004462028404"))
+RANGE_GROUP_ID = os.getenv("RANGE_GROUP_ID", "-1004296466829")
+GROUP_ID = OTP_GROUP_ID
 VOLTX_EMAIL = os.getenv("VOLTX_EMAIL", "mithucb999@gmail.com")
 VOLTX_PASSWORD = os.getenv("VOLTX_PASSWORD", "Mithu@808")
 
@@ -164,11 +166,6 @@ import json
 
 DB_FILE_PATH = "bot_db.json"
 
-def save_db():
-    try:
-        data = {
-            'isMaintenance': db_maintenance,
-            'services': db_services,
 db_global_dispense_qty = 2
 db_user_dispense_quantities = {}
 
@@ -309,12 +306,59 @@ def send_telegram_request(method, payload):
         return {"ok": False}
 
 def log_to_group(payload):
-    if not GROUP_ID:
+    if not OTP_GROUP_ID:
         return
     if isinstance(payload, str):
-        send_telegram_request('sendMessage', {'chat_id': GROUP_ID, 'text': payload, 'parse_mode': 'Markdown'})
+        send_telegram_request('sendMessage', {'chat_id': OTP_GROUP_ID, 'text': payload, 'parse_mode': 'Markdown'})
     else:
-        send_telegram_request('sendMessage', {'chat_id': GROUP_ID, **payload})
+        send_telegram_request('sendMessage', {'chat_id': OTP_GROUP_ID, **payload})
+
+def log_to_range_group(payload):
+    if not RANGE_GROUP_ID:
+        return
+    if isinstance(payload, str):
+        send_telegram_request('sendMessage', {'chat_id': RANGE_GROUP_ID, 'text': payload, 'parse_mode': 'Markdown'})
+    else:
+        send_telegram_request('sendMessage', {'chat_id': RANGE_GROUP_ID, **payload})
+
+def broadcast_active_ranges_to_range_group():
+    if not RANGE_GROUP_ID:
+        return
+    voltx_key = os.getenv("VOLTX_API_KEY", "MAB12CD34EF")
+    try:
+        res = requests.get("https://api.2oo9.cloud/MXS47FLFX0U/tnevs/@public/api/liveaccess", headers={"mauthapi": voltx_key}, timeout=10)
+        res_data = res.json()
+        services = res_data.get("data", {}).get("services", [])
+        if services:
+            msg = "╔═══════════════════════════════════════╗\n" \
+                  "   🛰️ **VOLTX SMS — LIVE ACTIVE RANGES** 🛰️\n" \
+                  "╚═══════════════════════════════════════╝\n\n" \
+                  "🔥 **নতুন একটিভ রেঞ্জ পাওয়া গেছে (সবাই কাজ শুরু করুন)!** 🔥\n\n"
+            for svc in services:
+                r_str = ", ".join(svc.get("ranges", []))
+                if r_str:
+                    msg += f"📘 **Service:** `{svc.get('sid')}`\n🎯 **Active Ranges:** `{r_str}`\n\n"
+            
+            msg += "👇 **নাম্বার নেওয়ার নিয়ম:**\n" \
+                   "1️⃣ বটের মেইন মেনু থেকে **GET NUMBER** এ চাপুন।\n" \
+                   "2️⃣ পছন্দসই **Range ID** লিখে পাঠিয়ে দিন।\n" \
+                   "________________________________________"
+            
+            bot_username = os.getenv("BOT_USERNAME", "brosnumberbot")
+            inline_keyboard = [
+                [
+                    {"text": "📲 Get Number (Bot) ↗️", "url": f"https://t.me/{bot_username}?start=getnum"},
+                    {"text": "💬 Support 👨‍💻", "url": "https://t.me/Prime90999"}
+                ]
+            ]
+            send_telegram_request('sendMessage', {
+                'chat_id': RANGE_GROUP_ID,
+                'text': msg,
+                'parse_mode': 'Markdown',
+                'reply_markup': {'inline_keyboard': inline_keyboard}
+            })
+    except Exception as e:
+        print("[Range Group Broadcast Error]:", e)
 
 SERVICE_EMOJI_MAP = {
     'facebook': '📘', 'instagram': '📸', 'whatsapp': '💬', 'telegram': '✈️',
@@ -449,7 +493,35 @@ def build_group_otp_broadcast_card(number, country_name, code, full_message, ser
         'reply_markup': {'inline_keyboard': inline_keyboard}
     }
 
-def send_main_menu(chat_id, text="🔥 **JS SUPER BOT** 🔥\n________________________\nSelect Your Service Number Button"):
+def generate_2fa_code(secret_input):
+    if not secret_input or not isinstance(secret_input, str):
+        return None
+    clean_secret = re.sub(r'[\s=]', '', secret_input).upper()
+    if len(clean_secret) < 8 or not re.match(r'^[A-Z2-7]+$', clean_secret):
+        return None
+    try:
+        missing_padding = len(clean_secret) % 8
+        if missing_padding:
+            clean_secret += '=' * (8 - missing_padding)
+        import base64
+        import hmac
+        import hashlib
+        import struct
+        key = base64.b32decode(clean_secret, casefold=True)
+        epoch = int(time.time())
+        time_step = 30
+        counter = epoch // time_step
+        msg = struct.pack(">Q", counter)
+        h = hmac.new(key, msg, hashlib.sha1).digest()
+        offset = h[-1] & 0x0F
+        code_int = struct.unpack(">I", h[offset:offset+4])[0] & 0x7FFFFFFF
+        otp = str(code_int % 1000000).zfill(6)
+        seconds_remaining = time_step - (epoch % time_step)
+        return {'code': otp, 'secondsRemaining': seconds_remaining, 'secret': clean_secret.rstrip('=')}
+    except Exception:
+        return None
+
+def send_main_menu(chat_id, text="⚡ **BRO'S NUMBER BOT** ⚡\n________________________\nSelect Your Service Number Button"):
     is_admin = not ADMIN_ID or str(chat_id) == str(ADMIN_ID)
     keyboard = [
         [{"text": "GET NUMBER", "style": "success"}],
@@ -959,9 +1031,10 @@ def handle_update(update):
                 send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': f"❌ **Request Failed:** `{str(e)}`", 'parse_mode': 'Markdown'})
             return
 
-        # Voltx SMS Live Access Ranges (/voltxranges)
-        if text.startswith("/voltxranges") or text.startswith("/voltxaccess"):
-            send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': "⏳ **Fetching Voltx Live Access Ranges...**", 'parse_mode': 'Markdown'})
+        # Voltx SMS Live Access Ranges (/voltxranges or /postranges)
+        if text.startswith("/voltxranges") or text.startswith("/voltxaccess") or text.startswith("/postranges") or text.startswith("/postrange"):
+            send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': "⏳ **Fetching & Posting Live Ranges to Range Group...**", 'parse_mode': 'Markdown'})
+            broadcast_active_ranges_to_range_group()
             voltx_key = os.getenv("VOLTX_API_KEY", "MAB12CD34EF")
             try:
                 res = requests.get("https://api.2oo9.cloud/MXS47FLFX0U/tnevs/@public/api/liveaccess", headers={"mauthapi": voltx_key}, timeout=10)
@@ -972,6 +1045,7 @@ def handle_update(update):
                     for svc in services:
                         r_str = ", ".join(svc.get("ranges", []))
                         msg += f"📘 **{svc.get('sid')}**\n🎯 Ranges: `{r_str}`\n\n"
+                    msg += "✅ **Posted Live Active Ranges to Range Group (-1004296466829)!**"
                     send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': msg, 'parse_mode': 'Markdown'})
                 else:
                     send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': "ℹ️ **No active range data found.**", 'parse_mode': 'Markdown'})
@@ -1177,7 +1251,7 @@ def handle_update(update):
         elif "get number" in lower_text or lower_text == "/getnumber":
             send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': "⌨️ **Enter Range ID (1 Number):**", 'parse_mode': 'Markdown'})
         elif "view range" in lower_text or "open range" in lower_text or lower_text == "/range":
-            group_url = os.getenv("RANGE_GROUP_URL", os.getenv("GROUP_URL", "https://t.me/Prime90999"))
+            group_url = os.getenv("RANGE_GROUP_URL", os.getenv("GROUP_URL", "https://t.me/c/4296466829/1"))
             inline_keyboard = [
                 [{"text": "Open Range Group ↗️", "url": group_url}]
             ]
@@ -1187,6 +1261,35 @@ def handle_update(update):
                 'parse_mode': 'Markdown',
                 'reply_markup': {"inline_keyboard": inline_keyboard}
             })
+        elif "2fa" in lower_text or "genaret" in lower_text or "generate" in lower_text:
+            send_telegram_request("sendMessage", {
+                'chat_id': chat_id,
+                'text': "🔐 **2FA CODE GENERATOR** 🔐\n\nPlease send your **2FA Secret Key** (e.g. `JBSWY3DPEHPK3PXP` or `OM4GYQKUI4WUKZ3Q`) to generate a live 6-digit TOTP verification code.\n\n_Note: You can paste any 2FA secret key anytime in chat!_",
+                'parse_mode': 'Markdown'
+            })
+        elif any(generate_2fa_code(line) for line in text.splitlines() if line.strip()):
+            lines_2fa = [line.strip() for line in text.splitlines() if line.strip()]
+            valid_2fa = [generate_2fa_code(l) for l in lines_2fa if generate_2fa_code(l)]
+            if valid_2fa:
+                card_2fa = "🔑 **2FA Authenticator Output**\n________________________________________\n\n"
+                for idx, item in enumerate(valid_2fa):
+                    card_2fa += f"{idx + 1}. `{item['secret']}` | `{item['code']}`\n"
+                
+                first_2fa = valid_2fa[0]
+                short_secret = first_2fa['secret'][:12] if len(first_2fa['secret']) > 12 else first_2fa['secret']
+                inline_keyboard = [
+                    [
+                        {"text": f"📋 {first_2fa['code']}", "callback_data": f"copy_{first_2fa['code']}", "copy_text": {"text": first_2fa['code']}, "style": "success"},
+                        {"text": f"🔑 {short_secret}", "callback_data": f"copy_{first_2fa['secret']}", "copy_text": {"text": first_2fa['secret']}, "style": "primary"}
+                    ],
+                    [{"text": "🔙 Back to Main Menu", "callback_data": "back_to_main_menu", "style": "primary"}]
+                ]
+                send_telegram_request("sendMessage", {
+                    'chat_id': chat_id,
+                    'text': card_2fa,
+                    'parse_mode': 'Markdown',
+                    'reply_markup': {"inline_keyboard": inline_keyboard}
+                })
         elif "support" in lower_text:
             support_msg = "💎 **JS Super Bot — Support Center** 💎\n\nNeed assistance with virtual numbers or OTP verification? Contact our admin team below:"
             send_telegram_request("sendMessage", {
