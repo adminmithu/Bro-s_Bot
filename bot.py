@@ -1,6 +1,6 @@
 """
 Bro's Number Bot - Standalone Python Runner (Long Polling)
-Includes IVAS SMS Portal live parser & Image 2 OTP Card formatting.
+Includes Live SMS parser & Image 2 OTP Card formatting.
 """
 
 import os
@@ -25,7 +25,9 @@ except ImportError:
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8848165401:AAFiUELKvW-apfBB5xBdQc92yzKcqgViwa4")
 ADMIN_ID = os.getenv("ADMIN_ID", "8929349073")
-GROUP_ID = os.getenv("GROUP_ID", "-1004296466829")
+GROUP_ID = os.getenv("GROUP_ID", "-1004462028404")
+VOLTX_EMAIL = os.getenv("VOLTX_EMAIL", "mithucb999@gmail.com")
+VOLTX_PASSWORD = os.getenv("VOLTX_PASSWORD", "Mithu@808")
 
 FLAG_MAP = {
     'US': '🇺🇸', 'USA': '🇺🇸', 'UNITED STATES': '🇺🇸',
@@ -167,6 +169,16 @@ def save_db():
         data = {
             'isMaintenance': db_maintenance,
             'services': db_services,
+db_global_dispense_qty = 2
+db_user_dispense_quantities = {}
+
+def save_db():
+    try:
+        data = {
+            'isMaintenance': db_maintenance,
+            'globalDispenseQty': db_global_dispense_qty,
+            'userDispenseQuantities': db_user_dispense_quantities,
+            'services': db_services,
             'countries': db_countries,
             'stock': db_stock,
             'issuedNumbers': db_issued_numbers,
@@ -180,13 +192,15 @@ def save_db():
         print("[DB Save Error]:", e)
 
 def load_db():
-    global db_maintenance, db_services, db_countries, db_stock, db_issued_numbers, db_user_stats, db_banned_users, db_all_users
+    global db_maintenance, db_global_dispense_qty, db_user_dispense_quantities, db_services, db_countries, db_stock, db_issued_numbers, db_user_stats, db_banned_users, db_all_users
     try:
         if os.path.exists(DB_FILE_PATH):
             with open(DB_FILE_PATH, 'r', encoding='utf-8') as f:
                 loaded = json.load(f)
                 if loaded:
                     db_maintenance = loaded.get('isMaintenance', db_maintenance)
+                    db_global_dispense_qty = loaded.get('globalDispenseQty', 2)
+                    db_user_dispense_quantities = loaded.get('userDispenseQuantities', {})
                     if loaded.get('services'): db_services = loaded['services']
                     if loaded.get('countries'): db_countries = loaded['countries']
                     if loaded.get('stock'): db_stock = loaded['stock']
@@ -198,6 +212,50 @@ def load_db():
         print("[DB Load Error]:", e)
 
 load_db()
+
+def set_global_dispense_quantity(qty):
+    global db_global_dispense_qty
+    load_db()
+    try:
+        v = int(qty)
+    except:
+        v = 2
+    db_global_dispense_qty = max(1, min(6, v))
+    save_db()
+    return db_global_dispense_qty
+
+def get_global_dispense_quantity():
+    load_db()
+    return db_global_dispense_qty or 2
+
+def set_user_dispense_quantity(user_identifier, qty):
+    global db_user_dispense_quantities
+    load_db()
+    if not user_identifier: return False
+    clean_id = str(user_identifier).strip().lstrip('@').lower()
+    try:
+        v = int(qty)
+    except:
+        v = 1
+    val = max(1, min(6, v))
+    if db_user_dispense_quantities is None: db_user_dispense_quantities = {}
+    db_user_dispense_quantities[clean_id] = val
+    save_db()
+    return val
+
+def get_user_dispense_quantity(user_id, username=None):
+    load_db()
+    if not db_user_dispense_quantities: return get_global_dispense_quantity()
+
+    if user_id and str(user_id) in db_user_dispense_quantities:
+        return max(1, min(6, int(db_user_dispense_quantities[str(user_id)])))
+
+    if username:
+        clean_uname = str(username).strip().lstrip('@').lower()
+        if clean_uname in db_user_dispense_quantities:
+            return max(1, min(6, int(db_user_dispense_quantities[clean_uname])))
+
+    return get_global_dispense_quantity()
 
 def resolve_stock_key(service_id, country_code):
     load_db()
@@ -309,21 +367,100 @@ def build_otp_card(service_id, country_code, phone_number, full_message, otp_cod
         'reply_markup': {'inline_keyboard': inline_keyboard}
     }
 
-def send_main_menu(chat_id, text="👋 **Welcome to Bro's Number Bot!**\n\nPlease select an option below:"):
+def build_number_added_card(range_str, country_name, numbers, country_code=None, service_name="Facebook"):
+    flag = get_flag_emoji(country_code or country_name)
+    clean_country = str(country_name or country_code or 'GLOBAL').strip()
+    clean_range = str(range_str or 'N/A').strip()
+    otp_group_url = os.getenv("OTP_GROUP_URL", "https://t.me/c/4462028404/1")
+
+    if isinstance(numbers, list):
+        num_list = numbers
+    else:
+        num_list = [numbers]
+
+    formatted_numbers = [str(n).strip() if str(n).strip().startswith('+') else f"+{str(n).strip()}" for n in num_list]
+
+    msg = f"✅ **YOUR NUMBER ADDED** ✅\n\n" \
+          f"> 📶 Range: {clean_range} ❞\n" \
+          f"> 🌐 Country: {flag} {clean_country} ❞\n"
+
+    if len(formatted_numbers) == 1:
+        msg += f"> 📞 Number: `{formatted_numbers[0]}` ❞\n"
+    else:
+        msg += f"> 📞 Numbers ({len(formatted_numbers)}): ❞\n"
+        for n in formatted_numbers:
+            msg += f"> • `{n}` ❞\n"
+
+    msg += f"> ✉️ SMS Status: Waiting for OTP... ❞"
+
+    inline_keyboard = [
+        [{"text": service_name, "callback_data": "svc_header"}]
+    ]
+
+    for num in formatted_numbers:
+        raw_digits = re.sub(r'[^\d+]', '', num)
+        inline_keyboard.append([
+            {"text": f"{num} 📋", "callback_data": f"copy_{raw_digits}", "copy_text": {"text": raw_digits}}
+        ])
+
+    inline_keyboard.append([{"text": "🔄 Change Number", "callback_data": "getnum_change"}])
+    inline_keyboard.append([{"text": "View OTP ↗️", "url": otp_group_url}])
+
+    return {
+        'text': msg,
+        'parse_mode': 'Markdown',
+        'reply_markup': {'inline_keyboard': inline_keyboard}
+    }
+
+def build_group_otp_broadcast_card(number, country_name, code, full_message, service_id=None):
+    country_code = detect_country_from_phone(number or country_name) or country_name or 'GLOBAL'
+    flag = get_flag_emoji(country_code)
+    clean_country = str(country_name or country_code or 'GLOBAL').strip()
+    bot_username = os.getenv("BOT_USERNAME", "brosnumberbot")
+    otp_group_url = os.getenv("OTP_GROUP_URL", "https://t.me/c/4462028404/1")
+
+    masked_number = re.sub(r'\D', '', str(number))
+    if len(masked_number) > 7:
+        masked_number = masked_number[:3] + 'xxxx' + masked_number[-4:]
+    else:
+        masked_number = str(number)
+
+    clean_code = str(code or 'N/A').strip()
+    clean_code_digits = re.sub(r'\D', '', clean_code) or clean_code
+    sms_body = str(full_message or 'No body text').strip()
+
+    msg = f"Your SMS received 🎀\n\n" \
+          f"🐱 Number: {masked_number}\n" \
+          f"🐱 Country: {clean_country} {flag}\n\n" \
+          f"🎁 Code: `{clean_code}`\n\n"
+
+    lines = [l.strip() for l in sms_body.splitlines() if l.strip()]
+    for line in lines:
+        msg += f"> {line} ❞\n"
+
+    inline_keyboard = [
+        [{"text": f"{clean_code_digits} 📋", "callback_data": f"copy_{clean_code_digits}", "copy_text": {"text": clean_code_digits}, "style": "success"}],
+        [{"text": "Get Number ↗️", "url": f"https://t.me/{bot_username}?start=getnum", "style": "primary"}, {"text": "Join Channel ↗️", "url": otp_group_url, "style": "primary"}]
+    ]
+
+    return {
+        'text': msg,
+        'parse_mode': 'Markdown',
+        'reply_markup': {'inline_keyboard': inline_keyboard}
+    }
+
+def send_main_menu(chat_id, text="🔥 **JS SUPER BOT** 🔥\n________________________\nSelect Your Service Number Button"):
+    is_admin = not ADMIN_ID or str(chat_id) == str(ADMIN_ID)
+    keyboard = [
+        [{"text": "GET NUMBER", "style": "success"}],
+        [{"text": "View Range", "style": "primary"}, {"text": "2FA GENARET", "style": "primary"}],
+        [{"text": "My Status", "style": "primary"}, {"text": "Ldarbord", "style": "primary"}]
+    ]
+    if is_admin:
+        keyboard.append([{"text": "⚙️ Admin Panel", "style": "danger"}])
+
     reply_markup = {
-        "keyboard": [
-            [
-                {"text": "📲 Get Number", "style": "success"},
-                {"text": "🔎 Search OTP", "style": "primary"}
-            ],
-            [
-                {"text": "📞 Support", "style": "danger"},
-                {"text": "👤 My Profile", "style": "primary"}
-            ],
-            [
-                {"text": "⚙️ Admin Panel", "style": "primary"}
-            ]
-        ],
+        "keyboard": keyboard,
         "resize_keyboard": True,
         "is_persistent": True
     }
@@ -336,10 +473,10 @@ def send_main_menu(chat_id, text="👋 **Welcome to Bro's Number Bot!**\n\nPleas
 
 def send_service_selection(chat_id):
     active_services = [s for s in db_services if s.get('enabled', True)]
-    if not active_services:
-        return send_telegram_request('sendMessage', {'chat_id': chat_id, 'text': "⚠️ **No active services available.**"})
 
-    inline_keyboard = []
+    inline_keyboard = [
+        [{"text": "⚡ VOLTX SMS (Live Range API)", "callback_data": "voltx_getnum"}]
+    ]
     for i in range(0, len(active_services), 2):
         row = []
         s1 = active_services[i]
@@ -355,7 +492,7 @@ def send_service_selection(chat_id):
 
     return send_telegram_request('sendMessage', {
         'chat_id': chat_id,
-        'text': "📲 **Select a Social Media Service:**",
+        'text': "📲 **Select a Social Media Service or Voltx SMS API:**",
         'parse_mode': 'Markdown',
         'reply_markup': {"inline_keyboard": inline_keyboard}
     })
@@ -466,48 +603,20 @@ def get_view_stocks_report():
 
 def send_admin_panel(chat_id, message_id=None):
     traffic_data = get_live_traffic_analytics()
+    global_qty = get_global_dispense_quantity()
     summary_text = "⚙️ **BRO'S BOT ADMIN CONTROL PANEL** ⚙️\n\n"
-    summary_text += f"📊 **Bot Stats:** Users: `{len(db_all_users)}` | Status: {'🚧 **Maintenance ON**' if db_maintenance else '🟢 **Active**'} | Total OTPs: `{traffic_data['total_otps']}`\n\n"
-
-    summary_text += "🔥 **LIVE COUNTRY OTP TRAFFIC:**\n"
-    if not traffic_data['items']:
-        summary_text += "ℹ️ _No OTP traffic recorded yet._\n"
-    else:
-        for item in traffic_data['items'][:5]:
-            summary_text += f"{item['serviceIcon']} {item['serviceName']} | {item['countryFlag']} **{item['countryName']}** ({item['countryCode']}): **{item['otpCount']} OTPs received**\n"
-
-    summary_text += "\n📦 **CURRENT STOCK BREAKDOWN:**\n"
-    stock_entries = []
-    for s in db_services:
-        for c in db_countries:
-            key = f"{s['id']}:{c['code']}"
-            cnt = len(db_stock.get(key, []))
-            if cnt > 0:
-                stock_entries.append(f"{s['icon']} {s['name']} | {c['flag']} {c['name']} ({c['code']}): **{cnt} numbers in stock**")
-    if not stock_entries:
-        summary_text += "⚠️ _No stock numbers currently available in bot database._\n"
-    else:
-        summary_text += "\n".join(stock_entries) + "\n"
-
-    summary_text += "\n👇 **Use the Colored Admin Reply Keyboard below to manage your bot:**"
+    summary_text += "📊 **Bot Stats:**\n"
+    summary_text += f"• Total Users: `{len(db_all_users)}`\n"
+    summary_text += f"• Bot Status: {'🚧 **Maintenance ON**' if db_maintenance else '🟢 **Active**'}\n"
+    summary_text += f"• Total OTPs Received: `{traffic_data['total_otps']}`\n"
+    summary_text += f"• Dispense Quantity: Default `{global_qty}` Number(s)\n\n"
+    summary_text += "👇 **Select an option below to manage your bot:**"
 
     reply_keyboard = {
         "keyboard": [
             [
-                {"text": "📥 Add Stock (.txt)", "style": "success"},
-                {"text": "📊 View Stocks", "style": "primary"}
-            ],
-            [
-                {"text": "📈 Live Traffic Details", "style": "primary"},
-                {"text": "📢 Broadcast", "style": "danger"}
-            ],
-            [
-                {"text": "➕ Add Service", "style": "success"},
-                {"text": "🔄 Toggle Services", "style": "primary"}
-            ],
-            [
-                {"text": "➕ Add Country", "style": "success"},
-                {"text": "❌ Delete Country", "style": "danger"}
+                {"text": "🔢 Set Dispense Quantity", "style": "success"},
+                {"text": "📢 Broadcast", "style": "primary"}
             ],
             [
                 {"text": "🚫 Ban User", "style": "danger"},
@@ -515,14 +624,10 @@ def send_admin_panel(chat_id, message_id=None):
             ],
             [
                 {"text": "👤 User Info", "style": "primary"},
-                {"text": "📊 View Stocks", "style": "primary"}
-            ],
-            [
-                {"text": "📲 Live SMS Tester", "style": "primary"},
                 {"text": f"🛠 Maint: {'ON 🚧' if db_maintenance else 'OFF 🟢'}", "style": "danger"}
             ],
             [
-                {"text": "🗑 Clear Stock", "style": "danger"},
+                {"text": "🧪 Test Group Post", "style": "success"},
                 {"text": "🏠 Main Menu", "style": "primary"}
             ]
         ],
@@ -627,6 +732,10 @@ def handle_update(update):
 
         if data.startswith("copy_"):
             send_telegram_request("answerCallbackQuery", {"callback_query_id": query["id"], "text": "Text copied to clipboard.", "show_alert": False})
+            return
+
+        if data == "getnum_change":
+            send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': "⌨️ **Enter Range ID (1 Number):**", 'parse_mode': 'Markdown'})
             return
 
         if data == "back_to_services":
@@ -831,7 +940,78 @@ def handle_update(update):
             send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': main_msg, 'parse_mode': 'Markdown'})
             return
 
-        # Receive Live SMS from IVAS Portal
+        # Voltx SMS OTP History (/voltxotp)
+        if text.startswith("/voltxotp") or text.startswith("/myvoltxotp"):
+            send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': "⏳ **Fetching Voltx SMS OTP History...**", 'parse_mode': 'Markdown'})
+            voltx_key = os.getenv("VOLTX_API_KEY", "MAB12CD34EF")
+            try:
+                res = requests.get("https://api.2oo9.cloud/MXS47FLFX0U/tnevs/@public/api/success-otp", headers={"mauthapi": voltx_key}, timeout=10)
+                res_data = res.json()
+                otps = res_data.get("data", {}).get("otps", [])
+                if otps:
+                    msg = "📩 **VOLTX SMS — LAST SUCCESSFUL OTPS** 📩\n\n"
+                    for idx, item in enumerate(otps[:10]):
+                        msg += f"{idx + 1}. 📱 `+{item.get('number')}`\n💬 Message: *{item.get('message')}*\n\n"
+                    send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': msg, 'parse_mode': 'Markdown'})
+                else:
+                    send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': "ℹ️ **No recent successful OTPs found.**", 'parse_mode': 'Markdown'})
+            except Exception as e:
+                send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': f"❌ **Request Failed:** `{str(e)}`", 'parse_mode': 'Markdown'})
+            return
+
+        # Voltx SMS Live Access Ranges (/voltxranges)
+        if text.startswith("/voltxranges") or text.startswith("/voltxaccess"):
+            send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': "⏳ **Fetching Voltx Live Access Ranges...**", 'parse_mode': 'Markdown'})
+            voltx_key = os.getenv("VOLTX_API_KEY", "MAB12CD34EF")
+            try:
+                res = requests.get("https://api.2oo9.cloud/MXS47FLFX0U/tnevs/@public/api/liveaccess", headers={"mauthapi": voltx_key}, timeout=10)
+                res_data = res.json()
+                services = res_data.get("data", {}).get("services", [])
+                if services:
+                    msg = "🛰️ **VOLTX SMS — RECENTLY ACTIVE SERVICES & RANGES** 🛰️\n\n"
+                    for svc in services:
+                        r_str = ", ".join(svc.get("ranges", []))
+                        msg += f"📘 **{svc.get('sid')}**\n🎯 Ranges: `{r_str}`\n\n"
+                    send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': msg, 'parse_mode': 'Markdown'})
+                else:
+                    send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': "ℹ️ **No active range data found.**", 'parse_mode': 'Markdown'})
+            except Exception as e:
+                send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': f"❌ **Request Failed:** `{str(e)}`", 'parse_mode': 'Markdown'})
+            return
+
+        # Voltx SMS Command (/voltx <rid>)
+        if text.startswith("/voltx") or text.startswith("/getvoltx"):
+            parts = text.split()
+            rid = parts[1] if len(parts) > 1 else None
+            if not rid:
+                msg = "⚡ **VOLTX SMS API COMMANDS** ⚡\n\n• `/voltx <range_id>` — Allocate virtual number\n• `/voltxotp` — View last 50 successful OTPs\n• `/voltxranges` — View recently active services & ranges\n\nExample: `/voltx 26134`"
+                send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': msg, 'parse_mode': 'Markdown'})
+                return
+
+            send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': f"⏳ **Connecting to Voltx SMS...** Requesting number for Range ID `{rid}`...", 'parse_mode': 'Markdown'})
+            voltx_url = os.getenv("VOLTX_BASE_URL", "https://api.2oo9.cloud/MXS47FLFX0U/tnevs/@public/api/getnum")
+            if not voltx_url.endswith("/getnum"): voltx_url = voltx_url.rstrip("/") + "/getnum"
+            voltx_key = os.getenv("VOLTX_API_KEY", "MAB12CD34EF")
+            try:
+                res = requests.post(voltx_url, json={"rid": str(rid).strip()}, headers={"Content-Type": "application/json", "mauthapi": voltx_key}, timeout=10)
+                res_data = res.json()
+                meta = res_data.get("meta", {})
+                data = res_data.get("data", {})
+                if meta.get("code") == 200 or meta.get("status") in ["ok", "success"]:
+                    num = data.get("full_number") or (f"+{data.get('no_plus_number')}" if data.get('no_plus_number') else "N/A")
+                    ctry = data.get("country", "Unknown")
+                    op = data.get("operator", "Unknown")
+                    card_msg = f"╔═══════════════════════════════════════╗\n   ⚡ **VOLTX SMS VIRTUAL NUMBER** ⚡\n╚═══════════════════════════════════════╝\n\n📱 **Allocated Number:** `{num}`\n📌 **Range ID:** `{rid}`\n🌍 **Country:** {ctry}\n📡 **Operator:** {op}\n🌐 **Provider:** Voltx SMS (2oo9 Cloud)\n\n💡 _Tap number to copy! Send your SMS to this number to receive OTP._"
+                    send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': card_msg, 'parse_mode': 'Markdown'})
+                    log_to_group(f"⚡ **[VOLTX SMS ALLOCATED]** Range: `{rid}` | Number: `{num}` | {ctry}")
+                else:
+                    err_msg = res_data.get("message") or meta.get("message") or f"Error Code: {meta.get('code', res.status_code)}"
+                    send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': f"❌ **VOLTX SMS ALLOCATION FAILED** ❌\n\n📌 **Range ID:** `{rid}`\n⚠️ **Error:** `{err_msg}`", 'parse_mode': 'Markdown'})
+            except Exception as e:
+                send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': f"❌ **VOLTX API Request Failed:** `{str(e)}`", 'parse_mode': 'Markdown'})
+            return
+
+        # Receive Live SMS
         if text.startswith("/receivesms") and is_admin:
             raw = text.replace("/receivesms", "").strip()
             sp = raw.find(' ')
@@ -995,9 +1175,20 @@ def handle_update(update):
         elif lower_text == "/start" or "main menu" in lower_text:
             send_main_menu(chat_id)
         elif "get number" in lower_text or lower_text == "/getnumber":
-            send_service_selection(chat_id)
+            send_telegram_request("sendMessage", {'chat_id': chat_id, 'text': "⌨️ **Enter Range ID (1 Number):**", 'parse_mode': 'Markdown'})
+        elif "view range" in lower_text or "open range" in lower_text or lower_text == "/range":
+            group_url = os.getenv("RANGE_GROUP_URL", os.getenv("GROUP_URL", "https://t.me/Prime90999"))
+            inline_keyboard = [
+                [{"text": "Open Range Group ↗️", "url": group_url}]
+            ]
+            send_telegram_request("sendMessage", {
+                'chat_id': chat_id,
+                'text': "👇 **Click the button below to view active ranges:**",
+                'parse_mode': 'Markdown',
+                'reply_markup': {"inline_keyboard": inline_keyboard}
+            })
         elif "support" in lower_text:
-            support_msg = "💎 **Bro's Number Bot — Support Center** 💎\n\nNeed assistance with virtual numbers or OTP verification? Contact our admin team below:"
+            support_msg = "💎 **JS Super Bot — Support Center** 💎\n\nNeed assistance with virtual numbers or OTP verification? Contact our admin team below:"
             send_telegram_request("sendMessage", {
                 'chat_id': chat_id,
                 'text': support_msg,
@@ -1036,6 +1227,66 @@ def handle_update(update):
         else:
             send_main_menu(chat_id, f"You typed: *{text}*")
 
+import threading
+
+processed_console_hit_ids = set()
+
+def process_and_broadcast_console_hits():
+    global processed_console_hit_ids
+    voltx_key = os.getenv("VOLTX_API_KEY", "MAB12CD34EF")
+    try:
+        url = "https://api.2oo9.cloud/MXS47FLFX0U/tnevs/@public/api/console"
+        res = requests.get(url, headers={"mauthapi": voltx_key}, timeout=10)
+        data = res.json()
+        meta = data.get("meta", {})
+        if meta.get("code") == 200 or meta.get("status") in ["ok", "success"]:
+            hits = data.get("data", {}).get("hits", [])
+            bot_username = os.getenv("BOT_USERNAME", "brosnumberbot")
+            for hit in reversed(hits):
+                hit_id = f"{hit.get('sid','')}_{hit.get('range','')}_{hit.get('time','')}_{(hit.get('message','') or '')[:20]}"
+                if hit_id in processed_console_hit_ids:
+                    continue
+                processed_console_hit_ids.add(hit_id)
+                if len(processed_console_hit_ids) > 1000:
+                    processed_console_hit_ids.pop()
+
+                sid = str(hit.get('sid') or hit.get('service') or 'Facebook').strip()
+                raw_ctry = hit.get('country') or hit.get('operator') or hit.get('op') or ''
+                if not raw_ctry and hit.get('range'):
+                    raw_ctry = re.sub(r'\D', '', hit.get('range'))[:3]
+                ctry_code = detect_country_from_phone(hit.get('range') or raw_ctry) or raw_ctry or 'GLOBAL'
+                flag = get_flag_emoji(ctry_code)
+                ctry_name = str(raw_ctry or ctry_code).strip()
+                range_str = hit.get('range', 'N/A')
+                sms_body = hit.get('message') or hit.get('text') or hit.get('fullMessage') or 'No SMS content'
+
+                card_text = f"*New Range BOt*\n\n" \
+                            f"> ✅ New Active Range ✅ ❞\n" \
+                            f"> 🌐 Country: {flag} {ctry_name} ❞\n" \
+                            f"> 📊 Range: {range_str} (🔥) ❞\n" \
+                            f"> 🔵 Service: {sid} ❞\n" \
+                            f"> ✉️ Full SMS: {sms_body} ❞"
+
+                inline_keyboard = [
+                    [{"text": "Numbar Bot ↗️", "url": f"https://t.me/{bot_username}?start=getnum"}]
+                ]
+
+                log_to_group({
+                    'text': card_text,
+                    'parse_mode': 'Markdown',
+                    'reply_markup': {'inline_keyboard': inline_keyboard}
+                })
+    except Exception:
+        pass
+
+def start_console_poll_loop():
+    while True:
+        try:
+            process_and_broadcast_console_hits()
+        except Exception:
+            pass
+        time.sleep(5)
+
 def main():
     print("🤖 Starting Bro's Number Bot (Polling)...")
     send_telegram_request("setMyCommands", {
@@ -1043,6 +1294,11 @@ def main():
             {"command": "start", "description": "🚀 Start Bot & Main Menu"}
         ]
     })
+    
+    # Start live Voltx console polling thread
+    t = threading.Thread(target=start_console_poll_loop, daemon=True)
+    t.start()
+
     offset = 0
     while True:
         try:

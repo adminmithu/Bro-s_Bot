@@ -1,6 +1,6 @@
 /**
  * Bro's Number Bot - Telegram Serverless Bot for Vercel
- * Ultra-Robust Architecture with Zero Fallback Kickouts & Live IVAS Radar
+ * Ultra-Robust Architecture with Zero Fallback Kickouts
  */
 
 const {
@@ -10,12 +10,15 @@ const {
   get4Numbers, getStockCount, clearAllStock, getLiveTrafficAnalytics,
   searchOTPByNumber, processIncomingSMS, buildOTPFormattedCard, getUserOtpCount,
   getUserInfo, banUser, unbanUser, isUserBanned, setMaintenance,
-  getMaintenance, registerUser, getAllUsers, recordLiveRange, getLiveRanges, getFlagEmoji
+  getMaintenance, registerUser, getAllUsers, recordLiveRange, getLiveRanges, getFlagEmoji,
+  allocateVoltxNumber, getVoltxLiveAccess, getVoltxSuccessOtp, getVoltxConsole, registerVoltxIssuedNumber,
+  formatConsoleHitCard, processAndBroadcastConsoleHits, buildNumberAddedCard, buildGroupOTPBroadcastCard,
+  setGlobalDispenseQuantity, getGlobalDispenseQuantity, setUserDispenseQuantity, getUserDispenseQuantity
 } = require('../lib/db.js');
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "8848165401:AAFiUELKvW-apfBB5xBdQc92yzKcqgViwa4";
 const ADMIN_ID = process.env.ADMIN_ID ? String(process.env.ADMIN_ID).trim() : "8929349073";
-const GROUP_ID = process.env.GROUP_ID ? String(process.env.GROUP_ID).trim() : '-1004296466829';
+const GROUP_ID = process.env.GROUP_ID ? String(process.env.GROUP_ID).trim() : '-1004462028404';
 
 // Session State Machine for Interactive Uploads & Navigation
 const sessionState = {};
@@ -66,12 +69,16 @@ async function getTelegramFileContent(fileId) {
 // -------------------------------------------------------------
 
 // Main Menu Keyboard
-async function sendMainMenu(chatId, text = "👋 **Welcome to Bro's Number Bot!**\n\nPlease select an option below:") {
+async function sendMainMenu(chatId, text = "🔥 **JS SUPER BOT** 🔥\n________________________\nSelect Your Service Number Button") {
+  const isUserAdmin = !ADMIN_ID || String(chatId).trim() === String(ADMIN_ID).trim() || String(chatId) === '8929349073';
   const keyboard = [
-    [{ text: "GET NUMBER", style: "primary" }, { text: "My Profile", style: "primary" }],
-    [{ text: "Search OTP", style: "success" }, { text: "Support", style: "primary" }],
-    [{ text: "Admin Panel", style: "danger" }]
+    [{ text: "GET NUMBER", style: "success" }],
+    [{ text: "View Range", style: "primary" }, { text: "2FA GENARET", style: "primary" }],
+    [{ text: "My Status", style: "primary" }, { text: "Ldarbord", style: "primary" }]
   ];
+  if (isUserAdmin) {
+    keyboard.push([{ text: "⚙️ Admin Panel", style: "danger" }]);
+  }
   return await sendTelegramRequest('sendMessage', {
     chat_id: chatId,
     text: text,
@@ -80,14 +87,47 @@ async function sendMainMenu(chatId, text = "👋 **Welcome to Bro's Number Bot!*
   });
 }
 
+// Voltx SMS Range Selection Keyboard (Live API Integration)
+async function sendVoltxRangeSelection(chatId) {
+  await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "⏳ **Fetching Voltx SMS Active Ranges...**", parse_mode: 'Markdown' });
+  const resAccess = await getVoltxLiveAccess();
+
+  let msg = `⚡ **VOLTX SMS — GET NUMBER (LIVE RANGE API)** ⚡\n\n`;
+  msg += `Allocate virtual numbers directly from Voltx SMS (2oo9 Cloud).\n\n`;
+  msg += `👇 **Select an Active Range below or type a Range ID (e.g. \`22897\` or \`26134\`):**\n\n`;
+
+  const inlineKeyboard = [];
+
+  if (resAccess.success && resAccess.services && resAccess.services.length > 0) {
+    resAccess.services.forEach(svc => {
+      if (svc.ranges && Array.isArray(svc.ranges)) {
+        svc.ranges.forEach(r => {
+          inlineKeyboard.push([{ text: `⚡ Range #${r} (${svc.sid})`, callback_data: `voltx_rid_${r}` }]);
+        });
+      }
+    });
+  }
+
+  inlineKeyboard.push([
+    { text: "✏️ Enter Custom Range ID", callback_data: "voltx_enter_rid" },
+    { text: "🏠 Main Menu", callback_data: "back_to_main_menu" }
+  ]);
+
+  return await sendTelegramRequest('sendMessage', {
+    chat_id: chatId,
+    text: msg,
+    parse_mode: 'Markdown',
+    reply_markup: { inline_keyboard: inlineKeyboard }
+  });
+}
+
 // Services Selection Keyboard
 async function sendServiceSelection(chatId) {
   const services = getServices(false);
-  if (services.length === 0) {
-    return await sendMainMenu(chatId, "⚠️ **No active services available at the moment!**");
-  }
 
-  const keyboard = [];
+  const keyboard = [
+    [{ text: "⚡ VOLTX SMS (Live Range API)", style: "success" }]
+  ];
   for (let i = 0; i < services.length; i += 2) {
     const s1 = services[i];
     const icon1 = s1.icon || getServiceIcon(s1.name);
@@ -103,7 +143,7 @@ async function sendServiceSelection(chatId) {
 
   return await sendTelegramRequest('sendMessage', {
     chat_id: chatId,
-    text: "📲 **Select a Social Media Service below:**",
+    text: "📲 **Select a Social Media Service or Voltx SMS API below:**",
     parse_mode: 'Markdown',
     reply_markup: { keyboard, resize_keyboard: true, is_persistent: true }
   });
@@ -152,10 +192,11 @@ async function sendDispensed4Numbers(chatId, serviceId, countryCode) {
   if (!result.success || !result.numbers || result.numbers.length === 0) {
     return await sendTelegramRequest('sendMessage', {
       chat_id: chatId,
-      text: `⚠️ **OUT OF STOCK!**\n\nNo numbers currently available for ${service.icon || '📱'} **${service.name}** (${country.flag || '🌐'} ${country.name}).\n\nPlease wait for admin to add stock or select another country.`,
+      text: `⚠️ **OUT OF STOCK!**\n\nNo numbers currently available in local stock for ${service.icon || '📱'} **${service.name}** (${country.flag || '🌐'} ${country.name}).\n\n💡 You can allocate a live virtual number directly via **Voltx SMS API** below!`,
       parse_mode: 'Markdown',
       reply_markup: {
         inline_keyboard: [
+          [{ text: "⚡ Get Live Number via Voltx SMS API", callback_data: "voltx_getnum" }],
           [{ text: "⬅️ Back to Services", callback_data: "back_to_services" }],
           [{ text: "🏠 Main Menu", callback_data: "back_to_main_menu" }]
         ]
@@ -192,46 +233,24 @@ async function sendDispensed4Numbers(chatId, serviceId, countryCode) {
 
 // Admin Panel Dashboard Keyboard
 async function sendAdminPanel(chatId) {
-  const summary = getAllStockSummary();
   const isMaint = getMaintenance();
   const totalUsers = getAllUsers().length;
   const trafficData = getLiveTrafficAnalytics();
+  const globalQty = getGlobalDispenseQuantity();
 
   let stockText = `⚙️ **BRO'S BOT ADMIN CONTROL PANEL** ⚙️\n\n`;
-  stockText += `📊 **Bot Stats:** Users: \`${totalUsers}\` | Status: ${isMaint ? '🚧 **Maintenance Mode ON**' : '🟢 **Active**'} | Total OTPs: \`${trafficData.totalOtpsReceived}\`\n\n`;
-
-  stockText += `🔥 **LIVE COUNTRY OTP TRAFFIC:**\n`;
-  if (trafficData.items.length === 0) {
-    stockText += `ℹ️ _No OTP traffic recorded yet._\n`;
-  } else {
-    trafficData.items.slice(0, 5).forEach(item => {
-      stockText += `${item.serviceName} | **${item.countryName}** (${item.countryCode}): **${item.otpCount} OTPs**\n`;
-    });
-  }
-
-  stockText += `\n📦 **CURRENT STOCK BREAKDOWN:**\n`;
-  const inStockItems = summary.filter(s => s.count > 0);
-  if (inStockItems.length === 0) {
-    stockText += `⚠️ _No stock numbers currently available._\n`;
-  } else {
-    inStockItems.forEach(item => {
-      stockText += `${item.service} | ${item.country} (${item.code}): **${item.count} in stock**\n`;
-    });
-  }
-
-  stockText += `\n👇 **Use the Admin Reply Keyboard below to manage your bot:**`;
+  stockText += `📊 **Bot Stats:**\n`;
+  stockText += `• Total Users: \`${totalUsers}\`\n`;
+  stockText += `• Bot Status: ${isMaint ? '🚧 **Maintenance Mode ON**' : '🟢 **Active**'}\n`;
+  stockText += `• Total OTPs Received: \`${trafficData.totalOtpsReceived}\`\n`;
+  stockText += `• Dispense Quantity: Default \`${globalQty}\` Number(s)\n\n`;
+  stockText += `👇 **Select an option below to manage your bot:**`;
 
   const keyboard = [
-    [{ text: "Add Stock (.txt)", style: "success" }, { text: "View Stocks", style: "primary" }],
-    [{ text: "Toggle Services", style: "primary" }, { text: "Toggle Countries", style: "primary" }],
-    [{ text: "Add Service", style: "success" }, { text: "Delete Service", style: "danger" }],
-    [{ text: "Add Country", style: "success" }, { text: "Delete Country", style: "danger" }],
-    [{ text: "Clear Services", style: "danger" }, { text: "Clear Countries", style: "danger" }],
-    [{ text: "Live Traffic Details", style: "primary" }, { text: "Broadcast", style: "success" }],
-    [{ text: "Ban User", style: "danger" }, { text: "Unban User", style: "success" }],
-    [{ text: "User Info", style: "primary" }, { text: "View Stocks", style: "primary" }],
-    [{ text: `Maint: ${isMaint ? 'ON' : 'OFF'}`, style: "danger" }, { text: "Clear Stock", style: "danger" }],
-    [{ text: "Test Group Post", style: "success" }, { text: "Main Menu", style: "primary" }]
+    [{ text: "🔢 Set Dispense Quantity", style: "success" }, { text: "📢 Broadcast", style: "primary" }],
+    [{ text: "🚫 Ban User", style: "danger" }, { text: "✅ Unban User", style: "success" }],
+    [{ text: "👤 User Info", style: "primary" }, { text: `Maint: ${isMaint ? 'ON' : 'OFF'}`, style: "danger" }],
+    [{ text: "🧪 Test Group Post", style: "success" }, { text: "Main Menu", style: "primary" }]
   ];
 
   return await sendTelegramRequest('sendMessage', {
@@ -385,28 +404,33 @@ module.exports = async function handler(req, res) {
   try {
     const query = req.query || {};
 
-    // 1. IVAS Link 2 Live Range Stream Webhook Endpoint (Disabled for maximum speed & stability)
-    if (query.range || query.radar) {
-      return res.status(200).json({ ok: true, status: "Radar endpoint disabled for performance" });
-    }
+    // Auto-Broadcast live hits from Voltx SMS console to group
+    try { await processAndBroadcastConsoleHits(logToGroup); } catch (e) {}
 
-    // 2. IVAS Link 1 SMS Webhook Endpoint
+    // 1. Incoming SMS Webhook Endpoint
     if (query.sms || query.number) {
       const number = query.number;
       const message = query.message || query.text || '';
       if (number) {
         const processed = processIncomingSMS(number, message);
-        const card = buildOTPFormattedCard(
+        const userCard = buildOTPFormattedCard(
           processed.record.serviceId,
           processed.record.countryCode,
           processed.number,
           processed.record.fullMessage,
           processed.record.otpCode
         );
+        const groupCard = buildGroupOTPBroadcastCard(
+          processed.number,
+          processed.record.countryCode,
+          processed.record.otpCode,
+          processed.record.fullMessage,
+          processed.record.serviceId
+        );
 
-        await logToGroup(card);
+        await logToGroup(groupCard);
         if (processed.record.userId) {
-          await sendTelegramRequest('sendMessage', { chat_id: processed.record.userId, ...card });
+          await sendTelegramRequest('sendMessage', { chat_id: processed.record.userId, ...userCard });
         }
         return res.status(200).json({ ok: true, status: "SMS Processed and Group Broadcasted" });
       }
@@ -452,6 +476,75 @@ module.exports = async function handler(req, res) {
           await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "🔎 **SEARCH OTP BY PHONE NUMBER**\n\nPlease reply with your **Phone Number**:\n\nExample: `+255710962660`", parse_mode: 'Markdown' });
         } else if (data === 'back_to_services') {
           await sendServiceSelection(chatId);
+        } else if (data.startsWith('setqty_')) {
+          const qty = parseInt(data.replace('setqty_', '')) || 1;
+          const targetUser = sessionState[chatId]?.targetUser || 'global';
+          delete sessionState[chatId];
+
+          if (targetUser.toLowerCase() === 'global' || targetUser.toLowerCase() === 'all') {
+            setGlobalDispenseQuantity(qty);
+            await sendTelegramRequest('sendMessage', {
+              chat_id: chatId,
+              text: `✅ **GLOBAL DISPENSE QUANTITY UPDATED!**\n\nAll users will now receive **${qty} Number(s)** per Range ID request.`,
+              parse_mode: 'Markdown'
+            });
+          } else {
+            setUserDispenseQuantity(targetUser, qty);
+            await sendTelegramRequest('sendMessage', {
+              chat_id: chatId,
+              text: `✅ **USER DISPENSE QUANTITY APPLIED!**\n\n👤 **Target User:** \`${targetUser}\`\n🔢 **Quantity:** **${qty} Number(s)** per Range ID request.`,
+              parse_mode: 'Markdown'
+            });
+          }
+          await sendAdminPanel(chatId);
+        } else if (data === 'getnum_change') {
+          const userQty = getUserDispenseQuantity(chatId, cbQuery.from?.username);
+          sessionState[chatId] = { step: 'WAITING_RANGE_ID' };
+          await sendTelegramRequest('sendMessage', {
+            chat_id: chatId,
+            text: `⌨️ **Enter Range ID (${userQty} Number${userQty > 1 ? 's' : ''}):**`,
+            parse_mode: 'Markdown'
+          });
+        } else if (data === 'voltx_getnum') {
+          await sendVoltxRangeSelection(chatId);
+        } else if (data === 'voltx_enter_rid') {
+          const userQty = getUserDispenseQuantity(chatId, cbQuery.from?.username);
+          sessionState[chatId] = { step: 'WAITING_VOLTX_RID' };
+          await sendTelegramRequest('sendMessage', {
+            chat_id: chatId,
+            text: `⌨️ **Enter Range ID (${userQty} Number${userQty > 1 ? 's' : ''}):**`,
+            parse_mode: 'Markdown'
+          });
+        } else if (data.startsWith('voltx_rid_')) {
+          const rid = data.replace('voltx_rid_', '').trim();
+          const userQty = getUserDispenseQuantity(chatId, cbQuery.from?.username);
+          await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `📡 **Searching (${userQty} Number${userQty > 1 ? 's' : ''})...**`, parse_mode: 'Markdown' });
+
+          const allocatedNumbers = [];
+          let lastCountry = 'Unknown';
+          let lastOp = 'Unknown';
+          let lastError = null;
+
+          for (let i = 0; i < userQty; i++) {
+            const resVoltx = await allocateVoltxNumber(rid);
+            if (resVoltx.success && resVoltx.fullNumber) {
+              allocatedNumbers.push(resVoltx.fullNumber);
+              lastCountry = resVoltx.country || lastCountry;
+              lastOp = resVoltx.operator || lastOp;
+              registerVoltxIssuedNumber(resVoltx.fullNumber, rid, lastCountry, lastOp, chatId);
+            } else {
+              lastError = resVoltx.error || lastError;
+            }
+          }
+
+          if (allocatedNumbers.length > 0) {
+            const card = buildNumberAddedCard(rid, lastCountry, allocatedNumbers, lastCountry);
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, ...card });
+            await logToGroup(`⚡ **[VOLTX SMS ALLOCATED]** Range: \`${rid}\` | Numbers (${allocatedNumbers.length}): \`${allocatedNumbers.join(', ')}\` | ${lastCountry}`);
+          } else {
+            const errCard = `❌ **VOLTX SMS ALLOCATION FAILED** ❌\n\n📌 **Range ID:** \`${rid}\`\n⚠️ **Error:** \`${lastError || 'Unknown API Error'}\`\n\n_Please check your Voltx API Key or Range ID and try again._`;
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: errCard, parse_mode: 'Markdown' });
+          }
         }
 
         return res.status(200).json({ ok: true });
@@ -476,6 +569,42 @@ module.exports = async function handler(req, res) {
         if (lowerText === '/start' || lowerText.includes('main menu')) {
           delete sessionState[chatId];
           await sendMainMenu(chatId);
+          return res.status(200).json({ ok: true });
+        }
+
+        // Interactive Session State Machine (Voltx SMS Range ID / Admin Uploads / Broadcast)
+        if (sessionState[chatId]?.step === 'WAITING_VOLTX_RID' || sessionState[chatId]?.step === 'WAITING_RANGE_ID') {
+          delete sessionState[chatId];
+          const typedRange = cleanText;
+          const rid = cleanText.replace(/[^\d]/g, '') || cleanText;
+          const userQty = getUserDispenseQuantity(chatId, message.from?.username);
+          await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `📡 **Searching (${userQty} Number${userQty > 1 ? 's' : ''})...**`, parse_mode: 'Markdown' });
+
+          const allocatedNumbers = [];
+          let lastCountry = 'Unknown';
+          let lastOp = 'Unknown';
+          let lastError = null;
+
+          for (let i = 0; i < userQty; i++) {
+            const resVoltx = await allocateVoltxNumber(rid);
+            if (resVoltx.success && resVoltx.fullNumber) {
+              allocatedNumbers.push(resVoltx.fullNumber);
+              lastCountry = resVoltx.country || lastCountry;
+              lastOp = resVoltx.operator || lastOp;
+              registerVoltxIssuedNumber(resVoltx.fullNumber, rid, lastCountry, lastOp, chatId);
+            } else {
+              lastError = resVoltx.error || lastError;
+            }
+          }
+
+          if (allocatedNumbers.length > 0) {
+            const card = buildNumberAddedCard(typedRange, lastCountry, allocatedNumbers, lastCountry);
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, ...card });
+            await logToGroup(`⚡ **[VOLTX SMS ALLOCATED]** Range: \`${typedRange}\` | Numbers (${allocatedNumbers.length}): \`${allocatedNumbers.join(', ')}\` | ${lastCountry}`);
+          } else {
+            const errCard = `❌ **VOLTX SMS ALLOCATION FAILED** ❌\n\n📌 **Range ID:** \`${typedRange}\`\n⚠️ **Error:** \`${lastError || 'Unknown API Error'}\`\n\n_Please check your Voltx API Key or Range ID and try again._`;
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: errCard, parse_mode: 'Markdown' });
+          }
           return res.status(200).json({ ok: true });
         }
 
@@ -616,6 +745,69 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true });
           }
 
+          if (state.step === 'WAITING_DISPENSE_USER_ID') {
+            let targetUser = cleanText;
+            if (cleanText.includes('Global Default')) {
+              targetUser = 'global';
+            }
+
+            sessionState[chatId] = { step: 'WAITING_DISPENSE_QTY_SELECT', targetUser };
+
+            const qtyKeyboard = {
+              keyboard: [
+                [
+                  { text: "1 Number", style: "primary" },
+                  { text: "2 Numbers", style: "primary" },
+                  { text: "3 Numbers", style: "primary" }
+                ],
+                [
+                  { text: "4 Numbers", style: "success" },
+                  { text: "5 Numbers", style: "success" },
+                  { text: "6 Numbers", style: "success" }
+                ],
+                [
+                  { text: "⬅️ Back to Admin Panel", style: "danger" }
+                ]
+              ],
+              resize_keyboard: true,
+              is_persistent: true
+            };
+
+            const targetLabel = targetUser.toLowerCase() === 'global' ? '🌐 **Global (All Users)**' : `👤 **Target User:** \`${targetUser}\``;
+
+            await sendTelegramRequest('sendMessage', {
+              chat_id: chatId,
+              text: `${targetLabel}\n\n🔢 **SELECT DISPENSE QUANTITY (1 to 6):**\nTap a reply button below to set how many numbers will be issued per Range ID request:`,
+              parse_mode: 'Markdown',
+              reply_markup: qtyKeyboard
+            });
+            return res.status(200).json({ ok: true });
+          }
+
+          if (state.step === 'WAITING_DISPENSE_QTY_SELECT') {
+            const qty = parseInt(cleanText.replace(/[^\d]/g, '')) || 2;
+            const targetUser = state.targetUser || 'global';
+            delete sessionState[chatId];
+
+            if (targetUser.toLowerCase() === 'global' || targetUser.toLowerCase() === 'all') {
+              setGlobalDispenseQuantity(qty);
+              await sendTelegramRequest('sendMessage', {
+                chat_id: chatId,
+                text: `✅ **GLOBAL DISPENSE QUANTITY UPDATED!**\n\nAll users will now receive **${qty} Number(s)** per Range ID request.`,
+                parse_mode: 'Markdown'
+              });
+            } else {
+              setUserDispenseQuantity(targetUser, qty);
+              await sendTelegramRequest('sendMessage', {
+                chat_id: chatId,
+                text: `✅ **USER DISPENSE QUANTITY APPLIED!**\n\n👤 **Target User:** \`${targetUser}\`\n🔢 **Quantity:** **${qty} Number(s)** per Range ID request.`,
+                parse_mode: 'Markdown'
+              });
+            }
+            await sendAdminPanel(chatId);
+            return res.status(200).json({ ok: true });
+          }
+
           if (state.step === 'WAITING_UNBAN_USER') {
             delete sessionState[chatId];
             unbanUser(text);
@@ -705,44 +897,188 @@ module.exports = async function handler(req, res) {
         // EXACT BUTTON MATCHERS (PREVENT UNWANTED MAIN MENU KICKOUTS)
         // ---------------------------------------------------------
 
-        // 1. Get Number & Services Router
-        if (lowerText.includes('get number') || lowerText.includes('back to services') || lowerText === '/getnumber') {
-          await sendServiceSelection(chatId);
+        // Voltx SMS - Successful OTPs (/voltxotp)
+        if (lowerText.startsWith('/voltxotp') || lowerText.startsWith('/myvoltxotp')) {
+          await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "⏳ **Fetching Voltx SMS OTP History...**", parse_mode: 'Markdown' });
+          const resOtp = await getVoltxSuccessOtp();
+          if (resOtp.success && resOtp.otps && resOtp.otps.length > 0) {
+            let msg = `📩 **VOLTX SMS — LAST SUCCESSFUL OTPS** 📩\n\n`;
+            resOtp.otps.slice(0, 10).forEach((item, idx) => {
+              const dt = item.time ? new Date(item.time).toLocaleTimeString('en-GB') : 'Just now';
+              msg += `${idx + 1}. 📱 \`+${item.number}\`\n💬 Message: *${item.message}*\n🕒 Time: \`${dt}\`\n\n`;
+            });
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg, parse_mode: 'Markdown' });
+          } else {
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `ℹ️ **No recent successful OTPs found.** ${resOtp.error ? `(\`${resOtp.error}\`)` : ''}`, parse_mode: 'Markdown' });
+          }
           return res.status(200).json({ ok: true });
         }
 
-        // 2. Support
+        // Voltx SMS - Live Access Ranges (/voltxaccess or /voltxranges)
+        if (lowerText.startsWith('/voltxaccess') || lowerText.startsWith('/voltxranges') || lowerText.startsWith('/voltxradar')) {
+          await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "⏳ **Fetching Voltx Live Access Ranges...**", parse_mode: 'Markdown' });
+          const resAccess = await getVoltxLiveAccess();
+          if (resAccess.success && resAccess.services && resAccess.services.length > 0) {
+            let msg = `🛰️ **VOLTX SMS — RECENTLY ACTIVE SERVICES & RANGES** 🛰️\n\n`;
+            resAccess.services.forEach(svc => {
+              const rangesStr = (svc.ranges || []).join(', ');
+              msg += `📘 **${svc.sid}**\n🎯 Ranges: \`${rangesStr}\`\n\n`;
+            });
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg, parse_mode: 'Markdown' });
+          } else {
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `ℹ️ **No active range data found.** ${resAccess.error ? `(\`${resAccess.error}\`)` : ''}`, parse_mode: 'Markdown' });
+          }
+          return res.status(200).json({ ok: true });
+        }
+
+        // Voltx SMS - Console Global Feed (/voltxconsole or /voltxfeed)
+        if (lowerText.startsWith('/voltxconsole') || lowerText.startsWith('/voltxfeed')) {
+          await sendTelegramRequest('sendMessage', { chat_id: chatId, text: "⏳ **Fetching Voltx Global Console Feed...**", parse_mode: 'Markdown' });
+          const resConsole = await getVoltxConsole();
+          if (resConsole.success && resConsole.hits && resConsole.hits.length > 0) {
+            let msg = `🌐 **VOLTX SMS — GLOBAL TRAFFIC FEED (LAST 15M)** 🌐\n\n`;
+            resConsole.hits.slice(0, 10).forEach((hit, idx) => {
+              const dt = hit.time ? new Date(hit.time).toLocaleTimeString('en-GB') : 'Now';
+              msg += `${idx + 1}. 📘 *${hit.sid}* | Range: \`${hit.range}\`\n💬 \`${hit.message}\` (\`${dt}\`)\n\n`;
+            });
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg, parse_mode: 'Markdown' });
+          } else {
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `ℹ️ **No recent global traffic hits.** ${resConsole.error ? `(\`${resConsole.error}\`)` : ''}`, parse_mode: 'Markdown' });
+          }
+          return res.status(200).json({ ok: true });
+        }
+
+        // Voltx SMS Command (/voltx <rid> or /getvoltx <rid>)
+        if (lowerText.startsWith('/voltx') || lowerText.startsWith('/getvoltx') || lowerText.startsWith('/voltxsms')) {
+          const parts = cleanText.split(/\s+/);
+          const rid = parts[1];
+          if (!rid) {
+            const msg = "⚡ **VOLTX SMS API COMMANDS** ⚡\n\n• `/voltx <range_id>` — Allocate virtual number\n• `/voltxotp` — View last 50 successful OTPs\n• `/voltxranges` — View recently active services & ranges\n• `/voltxfeed` — View global live traffic feed\n\nExample: `/voltx 26134`";
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg, parse_mode: 'Markdown' });
+            return res.status(200).json({ ok: true });
+          }
+
+          await sendTelegramRequest('sendMessage', { chat_id: chatId, text: `⏳ **Connecting to Voltx SMS...** Requesting number for Range ID \`${rid}\`...`, parse_mode: 'Markdown' });
+          const resVoltx = await allocateVoltxNumber(rid);
+
+          if (resVoltx.success && resVoltx.fullNumber) {
+            const num = resVoltx.fullNumber;
+            const ctry = resVoltx.country || 'Unknown';
+            const op = resVoltx.operator || 'Unknown';
+            const cardMsg = `╔═══════════════════════════════════════╗\n   ⚡ **VOLTX SMS VIRTUAL NUMBER** ⚡\n╚═══════════════════════════════════════╝\n\n📱 **Allocated Number:** \`${num}\`\n📌 **Range ID:** \`${rid}\`\n🌍 **Country:** ${ctry}\n📡 **Operator:** ${op}\n🌐 **Provider:** Voltx SMS (2oo9 Cloud)\n\n💡 _Tap number to copy! Send your SMS to this number to receive OTP._`;
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: cardMsg, parse_mode: 'Markdown' });
+            await logToGroup(`⚡ **[VOLTX SMS ALLOCATED]** Range: \`${rid}\` | Number: \`${num}\` | ${ctry}`);
+          } else {
+            const errCard = `❌ **VOLTX SMS ALLOCATION FAILED** ❌\n\n📌 **Range ID:** \`${rid}\`\n⚠️ **Error:** \`${resVoltx.error || 'Unknown API Error'}\`\n\n_Please check your Voltx API Key or Range ID and try again._`;
+            await sendTelegramRequest('sendMessage', { chat_id: chatId, text: errCard, parse_mode: 'Markdown' });
+          }
+          return res.status(200).json({ ok: true });
+        }
+
+        // 1. Get Number & Services Router (Matches Image 1)
+        if (lowerText.includes('get number') || lowerText.includes('back to services') || lowerText === '/getnumber') {
+          sessionState[chatId] = { step: 'WAITING_RANGE_ID' };
+          await sendTelegramRequest('sendMessage', {
+            chat_id: chatId,
+            text: "⌨️ **Enter Range ID (1 Number):**",
+            parse_mode: 'Markdown'
+          });
+          return res.status(200).json({ ok: true });
+        }
+
+        // 2. View Range Router (Matches Image 2)
+        if (lowerText.includes('view range') || lowerText.includes('open range') || lowerText === '/range') {
+          const groupUrl = process.env.RANGE_GROUP_URL || process.env.GROUP_URL || "https://t.me/Prime90999";
+          const inlineKeyboard = [
+            [{ text: "Open Range Group ↗️", url: groupUrl }]
+          ];
+          await sendTelegramRequest('sendMessage', {
+            chat_id: chatId,
+            text: "👇 **Click the button below to view active ranges:**",
+            parse_mode: 'Markdown',
+            reply_markup: { inline_keyboard: inlineKeyboard }
+          });
+          return res.status(200).json({ ok: true });
+        }
+
+        // 3. 2FA GENARET Router
+        if (lowerText.includes('2fa') || lowerText.includes('genaret') || lowerText.includes('generate')) {
+          await sendTelegramRequest('sendMessage', {
+            chat_id: chatId,
+            text: "🔐 **2FA CODE GENERATOR** 🔐\n\nPlease send your **2FA Secret Key** (e.g. `JBSWY3DPEHPK3PXP`) to generate a live 6-digit TOTP verification code.\n\n_Note: You can paste any 2FA secret key anytime in chat!_",
+            parse_mode: 'Markdown'
+          });
+          return res.status(200).json({ ok: true });
+        }
+
+        // 4. My Status / Profile Router
+        if (lowerText.includes('my status') || lowerText.includes('status') || lowerText.includes('profile') || lowerText === '/profile') {
+          const todayOtp = getUserOtpCount(chatId);
+          const userInfo = getUserInfo(chatId);
+          let msg = `📊 **MY ACCOUNT STATUS** 📊\n\n`;
+          msg += `🆔 **User ID:** \`${chatId}\`\n`;
+          msg += `🟢 **Status:** Active User\n`;
+          msg += `📱 **Today OTPs Received:** \`${todayOtp}\`\n`;
+          msg += `📲 **Total Numbers Issued:** \`${userInfo.totalIssued}\`\n\n`;
+          msg += `💡 _Tap GET NUMBER to allocate new virtual numbers!_`;
+          await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg, parse_mode: 'Markdown' });
+          return res.status(200).json({ ok: true });
+        }
+
+        // 5. Ldarbord / Leaderboard Router
+        if (lowerText.includes('ldarbord') || lowerText.includes('leaderboard') || lowerText.includes('board')) {
+          const traffic = getLiveTrafficAnalytics();
+          let msg = `🏆 **LIVE TOP TRAFFIC LEADERBOARD** 🏆\n\n`;
+          msg += `🔥 **High Demand Services & Countries:**\n\n`;
+          if (!traffic.items || traffic.items.length === 0) {
+            msg += `ℹ️ _No traffic recorded yet today. Be the first to grab a number!_\n`;
+          } else {
+            traffic.items.slice(0, 10).forEach((item, idx) => {
+              msg += `${idx + 1}. ${item.serviceIcon} **${item.serviceName}** | ${item.countryFlag} **${item.countryName}** (${item.countryCode})\n`;
+              msg += `   └ 🔐 OTPs Received: \`${item.otpCount}\` | 📱 Numbers: \`${item.issuedCount}\`\n\n`;
+            });
+          }
+          await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg, parse_mode: 'Markdown' });
+          return res.status(200).json({ ok: true });
+        }
+
+        // 6. Balance Router
+        if (lowerText.includes('balance') || lowerText === '/balance') {
+          let msg = `💰 **USER BALANCE INFO** 💰\n\n`;
+          msg += `👤 **Account:** User \`${chatId}\`\n`;
+          msg += `💵 **Current Balance:** \`$0.00\` (Unlimited Access Active)\n`;
+          msg += `🟢 **Account Status:** Active Premium\n\n`;
+          msg += `💡 _No balance restriction applied! You can grab numbers anytime._`;
+          await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg, parse_mode: 'Markdown' });
+          return res.status(200).json({ ok: true });
+        }
+
+        // 7. Withdraw Router
+        if (lowerText.includes('withdraw') || lowerText === '/withdraw') {
+          let msg = `💸 **WITHDRAWAL SECTION** 💸\n\n`;
+          msg += `📊 **Available Balance for Withdrawal:** \`$0.00\`\n`;
+          msg += `📌 **Minimum Withdrawal:** \`$10.00\`\n\n`;
+          msg += `📞 For referral earnings or payout queries, please contact Support Admin below:`;
+          await sendTelegramRequest('sendMessage', {
+            chat_id: chatId,
+            text: msg,
+            parse_mode: 'Markdown',
+            reply_markup: { inline_keyboard: [[{ text: "Contact Admin 👨‍💻", url: "https://t.me/Prime90999" }]] }
+          });
+          return res.status(200).json({ ok: true });
+        }
+
+        // 8. Support
         if (lowerText.includes('support') || lowerText === '/support') {
           await sendTelegramRequest('sendMessage', {
             chat_id: chatId,
-            text: "💎 **Bro's Number Bot — Support Center** 💎\n\nNeed help with virtual numbers or OTPs? Contact Admin below:",
+            text: "💎 **JS Super Bot — Support Center** 💎\n\nNeed help with virtual numbers or OTPs? Contact Admin below:",
             reply_markup: { inline_keyboard: [[{ text: "Admin Contact", url: "https://t.me/Prime90999", style: "success" }]] }
           });
           return res.status(200).json({ ok: true });
         }
 
-        // 3. User Profile
-        if (lowerText.includes('profile') || lowerText === '/profile') {
-          const todayOtp = getUserOtpCount(chatId);
-          await sendTelegramRequest('sendMessage', {
-            chat_id: chatId,
-            text: `👤 **USER PROFILE**\n\n🆔 User ID: \`${chatId}\`\n📱 Today OTP Received: \`${todayOtp}\`\n\n💡 _Tap GET NUMBER to request virtual numbers!_`,
-            parse_mode: 'Markdown'
-          });
-          return res.status(200).json({ ok: true });
-        }
-
-        // 4. Search OTP Prompt
-        if (lowerText.includes('search otp') || lowerText === '/searchotp') {
-          await sendTelegramRequest('sendMessage', {
-            chat_id: chatId,
-            text: "🔎 **SEARCH OTP BY PHONE NUMBER**\n\nPlease reply with your **Phone Number** below:\n\nExample: `+255710962660`",
-            parse_mode: 'Markdown'
-          });
-          return res.status(200).json({ ok: true });
-        }
-
-        // 5. Admin Panel Dashboard
+        // 9. Admin Panel Dashboard
         if (lowerText.includes('admin panel') || lowerText === '/admin') {
           if (isUserAdmin) {
             await sendAdminPanel(chatId);
@@ -905,6 +1241,25 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true });
           }
 
+          if (cleanText.includes('Set Dispense Quantity') || cleanText.includes('Dispense Quantity') || lowerText === '/setquantity') {
+            sessionState[chatId] = { step: 'WAITING_DISPENSE_USER_ID' };
+            const promptKeyboard = {
+              keyboard: [
+                [{ text: "🌐 Global Default (All Users)", style: "primary" }],
+                [{ text: "⬅️ Back to Admin Panel", style: "danger" }]
+              ],
+              resize_keyboard: true,
+              is_persistent: true
+            };
+            await sendTelegramRequest('sendMessage', {
+              chat_id: chatId,
+              text: "🔢 **SET USER DISPENSE QUANTITY**\n\nPlease enter the **User ID** or **Username** (e.g. `@john` or `8929349073`):\n\n_Or tap `🌐 Global Default (All Users)` below to change quantity for everyone._",
+              parse_mode: 'Markdown',
+              reply_markup: promptKeyboard
+            });
+            return res.status(200).json({ ok: true });
+          }
+
           if (cleanText.includes('Live Traffic Details')) {
             const t = getLiveTrafficAnalytics();
             let msg = `📊 **LIVE TRAFFIC ANALYTICS** 📊\n\n`;
@@ -1001,19 +1356,7 @@ module.exports = async function handler(req, res) {
           }
         }
 
-        // 7. Check IVAS Live Range Button Clicks (Radar Detector)
-        const allRanges = getLiveRanges();
-        const matchedRange = allRanges.find(r => cleanText.includes(r.rangeName) || r.rangeName.includes(cleanText.replace(/^[^\w\s]/g, '').trim()));
-        if (matchedRange) {
-          let msg = `📌 **LIVE IVAS RADAR DETAILS: ${matchedRange.flag} ${matchedRange.rangeName}**\n\n`;
-          msg += `🌍 Country: ${matchedRange.flag} **${matchedRange.country}**\n`;
-          msg += `📱 Live Test Number: \`${matchedRange.phoneNumber}\`\n`;
-          msg += `📘 Service: **${matchedRange.sid}**\n`;
-          msg += `🕒 Last Activity: \`${matchedRange.time}\`\n\n`;
-          msg += `💡 **Action:** To dispense 4 numbers for this range, click **Get Number** or select country!`;
-          await sendTelegramRequest('sendMessage', { chat_id: chatId, text: msg, parse_mode: 'Markdown' });
-          return res.status(200).json({ ok: true });
-        }
+
 
         // 8. Dynamic Service Matching (Only for non-admin command inputs)
         const isAdminKeyword = [
