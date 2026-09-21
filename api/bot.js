@@ -524,7 +524,12 @@ module.exports = async function handler(req, res) {
         const data = cbQuery.data || '';
 
         if (data.startsWith('copy_')) {
-          await sendTelegramRequest('answerCallbackQuery', { callback_query_id: cbQuery.id, text: "Text copied to clipboard." });
+          const copiedVal = data.replace('copy_', '').trim();
+          await sendTelegramRequest('answerCallbackQuery', {
+            callback_query_id: cbQuery.id,
+            text: `📋 Copied to clipboard: ${copiedVal}`,
+            show_alert: true
+          });
           return res.status(200).json({ ok: true });
         }
 
@@ -1046,15 +1051,38 @@ module.exports = async function handler(req, res) {
           return res.status(200).json({ ok: true });
         }
 
+        // Set Voltx API Key Command (/setvoltxkey <key>)
+        if (lowerText.startsWith('/setvoltxkey') || lowerText.startsWith('/setkey')) {
+          const parts = cleanText.split(/\s+/);
+          const newKey = parts[1];
+          if (!newKey) {
+            await sendTelegramRequest('sendMessage', {
+              chat_id: chatId,
+              text: "🔑 **SET VOLTX SMS API KEY** 🔑\n\nUsage: `/setvoltxkey <YOUR_VOLTX_API_KEY>`\n\nExample: `/setvoltxkey MAB12CD34EF...`",
+              parse_mode: 'Markdown'
+            });
+            return res.status(200).json({ ok: true });
+          }
+
+          setVoltxApiKey(newKey);
+          await sendTelegramRequest('sendMessage', {
+            chat_id: chatId,
+            text: `✅ **VOLTX SMS API KEY UPDATED SUCCESSFULLY!**\n\n🔑 New API Key: \`${newKey}\`\n\n_Bot will now use this API key for all number allocations!_`,
+            parse_mode: 'Markdown'
+          });
+          return res.status(200).json({ ok: true });
+        }
+
         // 2. View Range Router (Matches Image 2)
         if (lowerText.includes('view range') || lowerText.includes('open range') || lowerText === '/range') {
+          await broadcastActiveRangesToRangeGroup();
           const groupUrl = process.env.RANGE_GROUP_URL || process.env.GROUP_URL || "https://t.me/c/4296466829/1";
           const inlineKeyboard = [
             [{ text: "Open Range Group ↗️", url: groupUrl }]
           ];
           await sendTelegramRequest('sendMessage', {
             chat_id: chatId,
-            text: "👇 **Click the button below to view active ranges:**",
+            text: "👇 **Click the button below to view active ranges:**\n\n_Note: Live active ranges have also been posted to the Range Group (-1004296466829)!_",
             parse_mode: 'Markdown',
             reply_markup: { inline_keyboard: inlineKeyboard }
           });
